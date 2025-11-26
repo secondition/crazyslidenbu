@@ -9,9 +9,9 @@ import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
-import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -39,6 +39,17 @@ class LoginActivity : AppCompatActivity() {
     private val apiService = NbuApiService()
     private lateinit var userManager: UserManager
     private var userAdapter: ArrayAdapter<DropdownItem>? = null
+
+    // 用于接收 SignActivity 返回结果
+    private val signActivityLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == SignActivity.RESULT_CLEAR_INPUT) {
+            // 清除输入框内容
+            binding.etUsername.setText("")
+            binding.etPassword.setText("")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,10 +124,11 @@ class LoginActivity : AppCompatActivity() {
             dialogBinding.tvDialogTitle.text = "编辑用户"
         }
         
-        val dialog = MaterialAlertDialogBuilder(this, R.style.TransparentDialog)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogBinding.root)
-            .setBackground(resources.getDrawable(R.drawable.bg_dialog_rounded, null))
             .create()
+        
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         
         dialogBinding.btnCancel.setOnClickListener {
             dialog.dismiss()
@@ -162,10 +174,11 @@ class LoginActivity : AppCompatActivity() {
      */
     private fun showUserManagementDialog() {
         val dialogBinding = DialogUserManagementBinding.inflate(LayoutInflater.from(this))
-        val dialog = MaterialAlertDialogBuilder(this, R.style.TransparentDialog)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogBinding.root)
-            .setBackground(resources.getDrawable(R.drawable.bg_dialog_rounded, null))
             .create()
+            
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
             
         fun refreshList() {
             dialogBinding.llUserList.removeAllViews()
@@ -213,6 +226,14 @@ class LoginActivity : AppCompatActivity() {
                         }
                         .setNegativeButton("取消", null)
                         .show()
+                }
+                
+                // 点击整个列表项直接登录该账户
+                itemView.setOnClickListener {
+                    binding.etUsername.setText(user.username)
+                    binding.etPassword.setText(user.password)
+                    dialog.dismiss()
+                    performLogin()
                 }
                 
                 dialogBinding.llUserList.addView(itemView)
@@ -337,7 +358,7 @@ class LoginActivity : AppCompatActivity() {
         val intent = Intent(this@LoginActivity, SignActivity::class.java)
         intent.putExtra(SignActivity.EXTRA_JSESSION_ID, jsessionId)
         intent.putExtra(SignActivity.EXTRA_USERNAME, username)
-        startActivity(intent)
+        signActivityLauncher.launch(intent)
     }
 
     private fun setLoadingState(isLoading: Boolean, message: String = "") {

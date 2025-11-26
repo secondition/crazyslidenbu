@@ -7,8 +7,8 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.example.nbu.R
 import com.example.nbu.model.Course
@@ -106,6 +106,11 @@ class CourseAdapter(
                         expandedPositions.add(adapterPosition)
                     }
                     notifyItemChanged(adapterPosition)
+                } else {
+                    // 不可签到时显示原因
+                    course.unsignableReason?.let { reason ->
+                        Toast.makeText(itemView.context, reason, Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
 

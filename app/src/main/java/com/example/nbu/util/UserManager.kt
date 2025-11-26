@@ -119,11 +119,4 @@ class UserManager(context: Context) {
             .remove(KEY_PREFIX_SAVE_TIME + username)
             .apply()
     }
-    
-    /**
-     * 检查指定用户是否有有效的 Session 缓存
-     */
-    fun hasValidSession(username: String): Boolean {
-        return getCachedSession(username) != null
-    }
 }

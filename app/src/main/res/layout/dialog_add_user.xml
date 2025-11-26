@@ -22,14 +22,20 @@
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="学号">
+        android:hint="学号"
+        android:textColorHint="@color/text_secondary"
+        app:boxStrokeColor="@color/brand_primary"
+        app:hintTextColor="@color/brand_primary"
+        app:startIconDrawable="@drawable/ic_user_alien"
+        app:startIconTint="@color/text_secondary">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etUsername"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:inputType="number"
-            android:maxLength="20" />
+            android:maxLength="20"
+            android:textColor="@color/text_primary" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -40,13 +46,20 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:hint="密码"
-        app:endIconMode="password_toggle">
+        android:textColorHint="@color/text_secondary"
+        app:boxStrokeColor="@color/brand_primary"
+        app:hintTextColor="@color/brand_primary"
+        app:startIconDrawable="@drawable/ic_password_key"
+        app:startIconTint="@color/text_secondary"
+        app:endIconMode="password_toggle"
+        app:endIconTint="@color/text_secondary">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etPassword"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="textPassword" />
+            android:inputType="textPassword"
+            android:textColor="@color/text_primary" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -56,14 +69,20 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:hint="备注（可选，如：张三）">
+        android:hint="备注（可选，如：张三）"
+        android:textColorHint="@color/text_secondary"
+        app:boxStrokeColor="@color/brand_primary"
+        app:hintTextColor="@color/brand_primary"
+        app:startIconDrawable="@drawable/ic_label_outline"
+        app:startIconTint="@color/text_secondary">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etRemark"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:inputType="text"
-            android:maxLength="20" />
+            android:maxLength="20"
+            android:textColor="@color/text_primary" />
 
     </com.google.android.material.textfield.TextInputLayout>
 

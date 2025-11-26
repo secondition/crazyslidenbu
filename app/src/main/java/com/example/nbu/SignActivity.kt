@@ -2,11 +2,8 @@ package com.example.nbu
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -26,6 +23,7 @@ class SignActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_JSESSION_ID = "jsession_id"
         const val EXTRA_USERNAME = "username"
+        const val RESULT_CLEAR_INPUT = 1001
     }
 
     private lateinit var binding: ActivitySignBinding
@@ -56,42 +54,6 @@ class SignActivity : AppCompatActivity() {
         loadCourses()
     }
     
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_sign, menu)
-        return true
-    }
-    
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_logout -> {
-                showLogoutDialog()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
-    
-    private fun showLogoutDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("退出登录")
-            .setMessage("确定要退出登录吗？这将清除已缓存的登录状态。")
-            .setPositiveButton("确定") { _, _ ->
-                logout()
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-    
-    private fun logout() {
-        // 清除该用户的 Session 缓存
-        if (username.isNotEmpty()) {
-            userManager.clearSession(username)
-        }
-        
-        // 返回登录界面
-        navigateToLogin()
-    }
-    
     private fun navigateToLogin() {
         val intent = Intent(this, LoginActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -114,6 +76,8 @@ class SignActivity : AppCompatActivity() {
         }
 
         binding.toolbar.setNavigationOnClickListener {
+            // 设置结果码通知 LoginActivity 清除输入框
+            setResult(RESULT_CLEAR_INPUT)
             onBackPressedDispatcher.onBackPressed()
         }
     }

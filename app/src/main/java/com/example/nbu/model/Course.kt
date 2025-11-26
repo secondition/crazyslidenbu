@@ -12,11 +12,35 @@ data class Course(
     val attendanceId: String?,
     val attendanceState: Int?
 ) {
+    companion object {
+        // 测试模式开关：开启后除了未开启签到的课程，其他都能显示签到码输入框
+        const val TEST_MODE = false
+    }
+    
     /**
      * 是否可以签到（已开启签到且未签到）
+     * 测试模式下：只要开启了签到就可以显示输入框
      */
     val isSignable: Boolean
-        get() = coursePlanId != null && attendanceId != null && (attendanceState == null || attendanceState == 0)
+        get() = if (TEST_MODE) {
+            // 测试模式：只要开启签到就能输入签到码
+            coursePlanId != null && attendanceId != null
+        } else {
+            // 正常模式：已开启签到且未签到
+            coursePlanId != null && attendanceId != null && (attendanceState == null || attendanceState == 0)
+        }
+    
+    /**
+     * 获取不可签到的原因
+     */
+    val unsignableReason: String?
+        get() = when {
+            coursePlanId == null || attendanceId == null -> "该课程未开启签到"
+            attendanceState == 1 -> "您已签到"
+            attendanceState == 2 -> "您已迟到"
+            attendanceState == 3 -> "您已请假"
+            else -> null
+        }
     
     /**
      * 获取签到状态描述
