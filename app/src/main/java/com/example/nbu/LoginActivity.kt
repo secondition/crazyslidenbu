@@ -60,6 +60,7 @@ class LoginActivity : AppCompatActivity() {
         
         setupViews()
         loadUsers()
+        showVersionInfo()
     }
 
     private fun setupViews() {
@@ -387,6 +388,16 @@ class LoginActivity : AppCompatActivity() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         currentFocus?.let {
             imm.hideSoftInputFromWindow(it.windowToken, 0)
+        }
+    }
+    
+    private fun showVersionInfo() {
+        try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            val versionName = packageInfo.versionName
+            binding.tvVersion.text = "v$versionName"
+        } catch (e: Exception) {
+            binding.tvVersion.text = ""
         }
     }
 }
