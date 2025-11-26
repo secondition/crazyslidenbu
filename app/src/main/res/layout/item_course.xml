@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="8dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="@android:color/white">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <!-- 课程名称 -->
+        <TextView
+            android:id="@+id/tvCourseName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="课程名称"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:maxLines="2"
+            android:ellipsize="end"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/ivStatus"
+            android:layout_marginEnd="8dp"/>
+
+        <!-- 签到状态图标 -->
+        <ImageView
+            android:id="@+id/ivStatus"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_status_check"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/tvCourseName"
+            app:layout_constraintBottom_toBottomOf="@+id/tvCourseName"/>
+
+        <!-- 课程时间 -->
+        <TextView
+            android:id="@+id/tvTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="08:00 ~ 09:50"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:drawablePadding="8dp"
+            app:drawableStartCompat="@android:drawable/ic_menu_recent_history"
+            app:drawableTint="@color/text_secondary"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tvCourseName"/>
+
+        <!-- 签到区域 Group -->
+        <androidx.constraintlayout.widget.Group
+            android:id="@+id/signArea"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:constraint_referenced_ids="tilCode,btnSign"/>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilCode"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="签到码"
+            android:textColorHint="@color/text_secondary"
+            app:boxStrokeColor="@color/brand_primary"
+            app:hintTextColor="@color/brand_primary"
+            android:layout_marginEnd="16dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tvTime"
+            app:layout_constraintEnd_toStartOf="@+id/btnSign">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etCode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:maxLength="4"
+                android:textColor="@color/text_primary"
+                android:imeOptions="actionDone" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSign"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="签到"
+            app:backgroundTint="@color/brand_primary"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="@+id/tilCode"
+            app:layout_constraintTop_toTopOf="@+id/tilCode"/>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.material.card.MaterialCardView>
