@@ -54,13 +54,14 @@ class CourseAdapter(
             tvCourseName.text = course.displayName
             tvTime.text = "${course.startTime} ~ ${course.endTime}"
 
-            // 设置签到状态
+            // 设置签到状态图标
+            // 逻辑：未开放签到显示锁定，已开放签到根据签到状态显示对应图标
             val iconRes: Int
             val iconTint: Int
 
             when {
-                !course.isSignable -> {
-                    // 未开放
+                !course.isSignOpen -> {
+                    // 未开放签到（老师未开启签到）
                     iconRes = R.drawable.ic_status_lock
                     iconTint = Color.GRAY
                 }
@@ -80,7 +81,7 @@ class CourseAdapter(
                     iconTint = Color.parseColor("#2196F3") // Blue
                 }
                 else -> {
-                    // 未签到
+                    // 未签到（签到已开放但尚未签到，attendanceState == 0 或 null）
                     iconRes = R.drawable.ic_status_close
                     iconTint = Color.parseColor("#F44336") // Red
                 }

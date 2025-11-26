@@ -18,16 +18,22 @@ data class Course(
     }
     
     /**
+     * 签到功能是否已开放（老师是否开启了签到）
+     */
+    val isSignOpen: Boolean
+        get() = coursePlanId != null && attendanceId != null
+    
+    /**
      * 是否可以签到（已开启签到且未签到）
      * 测试模式下：只要开启了签到就可以显示输入框
      */
     val isSignable: Boolean
         get() = if (TEST_MODE) {
             // 测试模式：只要开启签到就能输入签到码
-            coursePlanId != null && attendanceId != null
+            isSignOpen
         } else {
             // 正常模式：已开启签到且未签到
-            coursePlanId != null && attendanceId != null && (attendanceState == null || attendanceState == 0)
+            isSignOpen && (attendanceState == null || attendanceState == 0)
         }
     
     /**

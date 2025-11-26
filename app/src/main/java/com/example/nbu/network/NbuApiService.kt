@@ -354,17 +354,63 @@ class NbuApiService {
 
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string() ?: ""
-
-            val courseResponse = gson.fromJson(responseBody, CourseResponse::class.java)
+            
+            Log.d(TAG, "获取课程响应: ${responseBody.take(500)}")
+            
+            // 检查响应是否为空
+            if (responseBody.isBlank()) {
+                return@withContext Result.failure(Exception("服务器返回空响应"))
+            }
+            
+            // 检查是否是 HTML 响应（可能是登录页面重定向）
+            if (responseBody.trimStart().startsWith("<") || responseBody.contains("<!DOCTYPE")) {
+                Log.w(TAG, "响应为 HTML，可能需要重新登录")
+                return@withContext Result.failure(Exception("登录失效，请重新登录"))
+            }
+            
+            // 尝试解析 JSON
+            val courseResponse = try {
+                gson.fromJson(responseBody, CourseResponse::class.java)
+            } catch (jsonException: Exception) {
+                Log.e(TAG, "JSON 解析失败: ${jsonException.message}")
+                Log.e(TAG, "原始响应: $responseBody")
+                return@withContext Result.failure(Exception("解析课程数据失败，请稍后重试"))
+            }
+            
+            // 检查解析结果是否为 null
+            if (courseResponse == null) {
+                return@withContext Result.failure(Exception("解析课程数据失败"))
+            }
             
             if (courseResponse.code == 20000) {
-                val courses = courseResponse.data?.map { it.toCourse() } ?: emptyList()
+                val courses = courseResponse.data?.mapNotNull { 
+                    try {
+                        it.toCourse()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "转换课程数据失败: ${e.message}")
+                        null
+                    }
+                } ?: emptyList()
                 return@withContext Result.success(courses)
             } else {
-                return@withContext Result.failure(Exception(courseResponse.msg ?: "获取课程失败"))
+                val errorMsg = courseResponse.msg ?: "获取课程失败"
+                // 检查是否需要重新登录
+                if (errorMsg.contains("登录") || errorMsg.contains("未授权") || courseResponse.code == 401) {
+                    return@withContext Result.failure(Exception("登录失效，请重新登录"))
+                }
+                return@withContext Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            return@withContext Result.failure(e)
+            Log.e(TAG, "获取课程异常: ${e.message}")
+            Log.e(TAG, "异常堆栈: ${e.stackTraceToString()}")
+            // 提供更友好的错误信息
+            val friendlyMessage = when {
+                e.message?.contains("timeout", ignoreCase = true) == true -> "网络超时，请检查网络连接"
+                e.message?.contains("Unable to resolve host", ignoreCase = true) == true -> "无法连接服务器，请检查网络"
+                e.message?.contains("JsonSyntax", ignoreCase = true) == true -> "解析数据失败，请稍后重试"
+                else -> "获取课程失败: ${e.message}"
+            }
+            return@withContext Result.failure(Exception(friendlyMessage))
         }
     }
 
