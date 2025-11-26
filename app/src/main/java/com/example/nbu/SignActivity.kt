@@ -1,10 +1,8 @@
 package com.example.nbu
 
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.WindowInsetsController
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -14,6 +12,7 @@ import com.example.nbu.adapter.CourseAdapter
 import com.example.nbu.databinding.ActivitySignBinding
 import com.example.nbu.model.Course
 import com.example.nbu.network.NbuApiService
+import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
 import kotlinx.coroutines.launch
 
@@ -42,8 +41,8 @@ class SignActivity : AppCompatActivity() {
         binding = ActivitySignBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
-        // 设置状态栏颜色，兼容所有 Android 版本
-        setupStatusBar()
+        // 设置状态栏颜色
+        StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.brand_primary))
 
         userManager = UserManager(this)
         
@@ -58,26 +57,6 @@ class SignActivity : AppCompatActivity() {
 
         setupViews()
         loadCourses()
-    }
-    
-    /**
-     * 设置状态栏颜色，兼容所有 Android 版本
-     */
-    private fun setupStatusBar() {
-        val statusBarColor = ContextCompat.getColor(this, R.color.brand_primary)
-        window.statusBarColor = statusBarColor
-        
-        // 设置状态栏图标为亮色（白色图标）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.insetsController?.setSystemBarsAppearance(
-                0,
-                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = 
-                window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-        }
     }
     
     private fun navigateToLogin() {

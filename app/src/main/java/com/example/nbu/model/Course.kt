@@ -49,18 +49,6 @@ data class Course(
         }
     
     /**
-     * 获取签到状态描述
-     */
-    val attendanceStateDesc: String
-        get() = when (attendanceState) {
-            0 -> "未签到"
-            1 -> "已签到"
-            2 -> "迟到"
-            3 -> "请假"
-            else -> "未知"
-        }
-    
-    /**
      * 课程显示名称
      */
     val displayName: String
