@@ -342,10 +342,11 @@ class NbuApiService {
      */
     suspend fun getCourses(jsessionId: String): Result<List<Course>> = withContext(Dispatchers.IO) {
         try {
+            // 注意：不要手动设置 Accept-Encoding，让 OkHttp 自动处理压缩
+            // 手动设置可能导致服务器返回压缩数据但 OkHttp 不自动解压
             val request = Request.Builder()
                 .url(COURSE_URL)
                 .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Encoding", "gzip, deflate, br, zstd")
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                 .header("Cookie", "JSESSIONID=$jsessionId")
                 .header("User-Agent", randomUserAgent())
@@ -408,7 +409,10 @@ class NbuApiService {
                 e.message?.contains("timeout", ignoreCase = true) == true -> "网络超时，请检查网络连接"
                 e.message?.contains("Unable to resolve host", ignoreCase = true) == true -> "无法连接服务器，请检查网络"
                 e.message?.contains("JsonSyntax", ignoreCase = true) == true -> "解析数据失败，请稍后重试"
-                else -> "获取课程失败: ${e.message}"
+                e.message?.contains("IllegalState", ignoreCase = true) == true -> "数据格式异常，请稍后重试"
+                e.message?.contains("Expected", ignoreCase = true) == true -> "服务器返回格式异常，请稍后重试"
+                e is IllegalStateException -> "数据解析异常，请刷新重试"
+                else -> "获取课程失败，请稍后重试"
             }
             return@withContext Result.failure(Exception(friendlyMessage))
         }
@@ -429,10 +433,10 @@ class NbuApiService {
             
             val url = "$SIGN_URL?timeNow=$timeNow&courseCode=$codeStr&coursePlanId=$coursePlanId&attendanceId=$attendanceId&lng=0&lat=0"
 
+            // 注意：不要手动设置 Accept-Encoding，让 OkHttp 自动处理压缩
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Encoding", "gzip, deflate, br, zstd")
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                 .header("Connection", "keep-alive")
                 .header("Cookie", "JSESSIONID=$jsessionId")
@@ -445,6 +449,8 @@ class NbuApiService {
 
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string() ?: ""
+            
+            Log.d(TAG, "签到响应: $responseBody")
 
             val signResult = when {
                 responseBody.contains("错误") -> SignResult(false, courseCode, "签到码错误")

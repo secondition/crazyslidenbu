@@ -71,7 +71,7 @@ data class Course(
  * 获取课程列表的响应
  */
 data class CourseResponse(
-    val code: Int,
+    val code: Int?,
     val msg: String?,
     val data: List<CourseData>?
 )
@@ -81,9 +81,9 @@ data class CourseData(
     val courseName: String?,
     val startTime: String?,
     val endTime: String?,
-    val coursePlanId: String?,
-    val attendanceId: String?,
-    val attendanceState: Int?
+    val coursePlanId: Any?,  // 可能是 String 或 Long
+    val attendanceId: Any?,   // 可能是 String 或 Long
+    val attendanceState: Any? // 可能是 Int 或 String
 ) {
     fun toCourse(): Course {
         return Course(
@@ -91,9 +91,13 @@ data class CourseData(
             courseName = courseName ?: "",
             startTime = startTime ?: "",
             endTime = endTime ?: "",
-            coursePlanId = coursePlanId,
-            attendanceId = attendanceId,
-            attendanceState = attendanceState
+            coursePlanId = coursePlanId?.toString()?.takeIf { it != "null" && it.isNotBlank() },
+            attendanceId = attendanceId?.toString()?.takeIf { it != "null" && it.isNotBlank() },
+            attendanceState = when (attendanceState) {
+                is Number -> attendanceState.toInt()
+                is String -> attendanceState.toIntOrNull()
+                else -> null
+            }
         )
     }
 }
