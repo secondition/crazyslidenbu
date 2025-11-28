@@ -84,6 +84,32 @@ class NbuApiService {
     }
 
     /**
+     * 预热连接（DNS + TLS）
+     * 通过 HEAD 请求预热连接，不消耗 execution 参数
+     */
+    suspend fun preloadLoginPage() = withContext(Dispatchers.IO) {
+        try {
+            val startTime = System.currentTimeMillis()
+            Log.d(TAG, "[预热] 开始预热连接...")
+            
+            // 使用 HEAD 请求预热 DNS + TLS 连接，不获取实际内容
+            val warmupRequest = Request.Builder()
+                .url(LOGIN_BASE_URL)
+                .head()  // HEAD 请求，只建立连接，不获取响应体
+                .header("Connection", "keep-alive")
+                .header("User-Agent", randomUserAgent())
+                .build()
+
+            val response = client.newCall(warmupRequest).execute()
+            response.close()  // 立即关闭，但连接会保持在连接池中
+            
+            Log.d(TAG, "[预热] 完成，耗时: ${System.currentTimeMillis() - startTime} ms，连接已缓存")
+        } catch (e: Exception) {
+            Log.e(TAG, "[预热] 异常: ${e.message}")
+        }
+    }
+
+    /**
      * 生成随机 User-Agent
      */
     private fun randomUserAgent(): String {
@@ -172,13 +198,16 @@ class NbuApiService {
      */
     suspend fun login(username: String, password: String): Result<String> = withContext(Dispatchers.IO) {
         try {
+            val totalStart = System.currentTimeMillis()
+            
             // 清除旧的 Cookie
             sharedCookieJar.clear()
             
-            // Step 1: 获取登录页面
+            // Step 1: 获取登录页面（连接已通过预热缓存）
+            var stepStart = System.currentTimeMillis()
             Log.d(TAG, "[Step 1] 获取登录页面...")
+            
             val loginPageUrl = "$LOGIN_BASE_URL?service=$SERVICE_URL"
-            // 模拟 Python requests.Session() 的默认 headers
             val loginPageRequest = Request.Builder()
                 .url(loginPageUrl)
                 .header("Accept", "*/*")
@@ -188,6 +217,8 @@ class NbuApiService {
                 .build()
 
             val loginPageResponse = client.newCall(loginPageRequest).execute()
+            Log.d(TAG, "  [耗时] Step 1: ${System.currentTimeMillis() - stepStart} ms")
+            
             if (!loginPageResponse.isSuccessful) {
                 return@withContext Result.failure(Exception("获取登录页面失败: ${loginPageResponse.code}"))
             }
@@ -208,11 +239,14 @@ class NbuApiService {
             }
 
             // Step 2: 加密密码
+            stepStart = System.currentTimeMillis()
             Log.d(TAG, "[Step 2] 加密密码...")
             val encryptedPassword = encryptPassword(password, salt)
+            Log.d(TAG, "  [耗时] Step 2: ${System.currentTimeMillis() - stepStart} ms")
             Log.d(TAG, "  - 加密后的密码: ${encryptedPassword.take(50)}...")
 
             // Step 3: 提交登录请求
+            stepStart = System.currentTimeMillis()
             Log.d(TAG, "[Step 3] 提交登录请求...")
             val encodedServiceUrl = URLEncoder.encode(SERVICE_URL, "UTF-8")
             val loginUrl = "$LOGIN_BASE_URL?service=$encodedServiceUrl"
@@ -243,6 +277,7 @@ class NbuApiService {
                 .build()
 
             val loginResponse = client.newCall(loginRequest).execute()
+            Log.d(TAG, "  [耗时] Step 3: ${System.currentTimeMillis() - stepStart} ms")
             Log.d(TAG, "  - 响应状态码: ${loginResponse.code}")
 
             if (loginResponse.code == 302) {
@@ -251,6 +286,7 @@ class NbuApiService {
                 
                 if (redirectUrl != null && redirectUrl.contains("ticket=")) {
                     // Step 4: 手动跟踪重定向获取 JSESSIONID
+                    stepStart = System.currentTimeMillis()
                     Log.d(TAG, "[Step 4] 获取 JSESSIONID...")
                     
                     var currentUrl: String = redirectUrl
@@ -298,6 +334,7 @@ class NbuApiService {
                         // 不是重定向，结束
                         break
                     }
+                    Log.d(TAG, "  [耗时] Step 4: ${System.currentTimeMillis() - stepStart} ms")
                     
                     // 如果还没找到，尝试从 CookieJar 获取
                     if (jsessionId == null) {
@@ -307,6 +344,7 @@ class NbuApiService {
                     
                     if (jsessionId != null) {
                         Log.d(TAG, "[成功] JSESSIONID: $jsessionId")
+                        Log.d(TAG, "[总耗时] 登录完成: ${System.currentTimeMillis() - totalStart} ms")
                         return@withContext Result.success(jsessionId)
                     }
                     
@@ -354,6 +392,9 @@ class NbuApiService {
      */
     suspend fun getCourses(jsessionId: String): Result<List<Course>> = withContext(Dispatchers.IO) {
         try {
+            val startTime = System.currentTimeMillis()
+            Log.d(TAG, "[getCourses] 开始获取课程列表...")
+            
             // 模拟浏览器环境的 headers，与 signtest.py 的 get_courses 保持一致
             val request = Request.Builder()
                 .url(COURSE_URL)
@@ -368,6 +409,7 @@ class NbuApiService {
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string() ?: ""
             
+            Log.d(TAG, "[getCourses] 耗时: ${System.currentTimeMillis() - startTime} ms")
             Log.d(TAG, "获取课程响应: ${responseBody.take(500)}")
             
             // 检查响应是否为空

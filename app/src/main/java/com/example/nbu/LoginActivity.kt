@@ -38,7 +38,8 @@ import kotlinx.coroutines.launch
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
-    private val apiService = NbuApiService()
+    // 使用全局共享的 ApiService（已预加载登录页面）
+    private val apiService by lazy { NbuApplication.apiService }
     private lateinit var userManager: UserManager
     private var userAdapter: ArrayAdapter<DropdownItem>? = null
 

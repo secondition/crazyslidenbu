@@ -29,7 +29,8 @@ class SignActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivitySignBinding
-    private val apiService = NbuApiService()
+    // 使用全局共享的 ApiService
+    private val apiService by lazy { NbuApplication.apiService }
     private lateinit var adapter: CourseAdapter
     private lateinit var userManager: UserManager
     
