@@ -26,7 +26,8 @@ class SimpleCookieJar : CookieJar {
     
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
         val host = url.host
-        return cookieStore[host]?.filter { !it.expiresAt.let { exp -> exp < System.currentTimeMillis() } } ?: emptyList()
+        val now = System.currentTimeMillis()
+        return cookieStore[host]?.filter { it.expiresAt > now } ?: emptyList()
     }
     
     /**

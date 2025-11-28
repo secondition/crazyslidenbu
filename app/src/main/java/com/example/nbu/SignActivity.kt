@@ -11,7 +11,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.nbu.adapter.CourseAdapter
 import com.example.nbu.databinding.ActivitySignBinding
 import com.example.nbu.model.Course
-import com.example.nbu.network.NbuApiService
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
 import kotlinx.coroutines.launch
@@ -164,18 +163,10 @@ class SignActivity : AppCompatActivity() {
                     // 刷新课程列表
                     loadCourses()
                 } else {
-                    Toast.makeText(
-                        this@SignActivity, 
-                        "签到失败: ${signResult.message}", 
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(this@SignActivity, "签到失败: ${signResult.message}", Toast.LENGTH_SHORT).show()
                 }
             }.onFailure { error ->
-                Toast.makeText(
-                    this@SignActivity, 
-                    "签到出错: ${error.message}", 
-                    Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(this@SignActivity, "签到出错: ${error.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

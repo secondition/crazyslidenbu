@@ -49,41 +49,6 @@ class NbuApiService {
         .build()
 
     /**
-     * 验证 JSESSIONID 是否有效
-     * 通过访问获取课程接口来验证
-     */
-    suspend fun validateSession(jsessionId: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            Log.d(TAG, "验证 Session 有效性...")
-            // 与 getCourses 保持一致的 headers
-            val request = Request.Builder()
-                .url(COURSE_URL)
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
-                .header("Cookie", "JSESSIONID=$jsessionId")
-                .header("Dnt", "1")
-                .header("User-Agent", randomUserAgent())
-                .get()
-                .build()
-
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
-            
-            // 检查响应是否有效
-            val isValid = response.isSuccessful && 
-                          responseBody.contains("20000") && 
-                          !responseBody.contains("未登录") &&
-                          !responseBody.contains("登录失效")
-            
-            Log.d(TAG, "Session 验证结果: $isValid")
-            return@withContext isValid
-        } catch (e: Exception) {
-            Log.e(TAG, "验证 Session 异常: ${e.message}")
-            return@withContext false
-        }
-    }
-
-    /**
      * 预热连接（DNS + TLS）
      * 通过 HEAD 请求预热连接，不消耗 execution 参数
      */

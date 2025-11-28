@@ -20,7 +20,6 @@ import com.example.nbu.databinding.ActivityLoginBinding
 import com.example.nbu.databinding.DialogAddUserBinding
 import com.example.nbu.databinding.DialogUserManagementBinding
 import com.example.nbu.model.User
-import com.example.nbu.network.NbuApiService
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
 import kotlinx.coroutines.launch
@@ -280,45 +279,22 @@ class LoginActivity : AppCompatActivity() {
             binding.tilPassword.error = null
         }
 
-        // 检查是否有该用户的缓存 Session
+        // 检查是否有该用户的缓存 Session（5分钟内有效）
         val cachedSession = userManager.getCachedSession(username)
         
         if (cachedSession != null) {
-            // 有缓存，先验证是否有效
-            tryUseCachedSession(username, password, cachedSession)
+            // 5分钟内的缓存，直接使用（不验证）
+            Toast.makeText(
+                this@LoginActivity, 
+                "✓ 登录成功（使用缓存Session）", 
+                Toast.LENGTH_SHORT
+            ).show()
+            navigateToSignActivity(cachedSession, username)
         } else {
-            // 无缓存，直接通过 UIS 登录
-            loginViaUis(username, password)
-        }
-    }
-    
-    /**
-     * 尝试使用缓存的 Session
-     */
-    private fun tryUseCachedSession(username: String, password: String, cachedSession: String) {
-        setLoadingState(true, "正在验证登录状态...")
-        
-        lifecycleScope.launch {
-            val isValid = apiService.validateSession(cachedSession)
-            
-            if (isValid) {
-                // 缓存有效，直接使用
-                setLoadingState(false)
-                
-                Toast.makeText(
-                    this@LoginActivity, 
-                    "✓ 登录成功（使用缓存Session）", 
-                    Toast.LENGTH_SHORT
-                ).show()
-                
-                navigateToSignActivity(cachedSession, username)
-            } else {
-                // 缓存失效，自动重新登录（用户无感知）
-                userManager.clearSession(username)
-                
-                // 自动通过 UIS 重新获取（不改变 Loading 状态）
-                setLoadingState(true, "缓存已失效，正在重新登录...")
-                loginViaUisInternal(username, password, isRefresh = true)
+            // 无缓存或已过期，通过 UIS 登录
+            setLoadingState(true, "正在登录...")
+            lifecycleScope.launch {
+                loginViaUis(username, password)
             }
         }
     }
@@ -326,19 +302,7 @@ class LoginActivity : AppCompatActivity() {
     /**
      * 通过 UIS 统一身份认证登录
      */
-    private fun loginViaUis(username: String, password: String) {
-        setLoadingState(true, "正在登录...")
-        
-        lifecycleScope.launch {
-            loginViaUisInternal(username, password, isRefresh = false)
-        }
-    }
-    
-    /**
-     * 内部方法：通过 UIS 登录
-     * @param isRefresh 是否是刷新缓存（用于区分提示信息）
-     */
-    private suspend fun loginViaUisInternal(username: String, password: String, isRefresh: Boolean = false) {
+    private suspend fun loginViaUis(username: String, password: String) {
         val result = apiService.login(username, password)
         
         result.onSuccess { jsessionId ->
@@ -347,12 +311,7 @@ class LoginActivity : AppCompatActivity() {
             // 保存 Session 到缓存
             userManager.saveSession(username, jsessionId)
             
-            val message = if (isRefresh) {
-                "✓ 登录成功（已刷新Session）"
-            } else {
-                "✓ 登录成功（新Session）"
-            }
-            Toast.makeText(this@LoginActivity, message, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "✓ 登录成功（新Session）", Toast.LENGTH_SHORT).show()
             
             navigateToSignActivity(jsessionId, username)
         }.onFailure { error ->
@@ -362,7 +321,7 @@ class LoginActivity : AppCompatActivity() {
     }
     
     private fun navigateToSignActivity(jsessionId: String, username: String) {
-        val intent = Intent(this@LoginActivity, SignActivity::class.java)
+        val intent = Intent(this, SignActivity::class.java)
         intent.putExtra(SignActivity.EXTRA_JSESSION_ID, jsessionId)
         intent.putExtra(SignActivity.EXTRA_USERNAME, username)
         signActivityLauncher.launch(intent)

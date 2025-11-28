@@ -20,8 +20,8 @@ class UserManager(context: Context) {
         private const val KEY_PREFIX_JSESSIONID = "jsessionid_"
         private const val KEY_PREFIX_SAVE_TIME = "save_time_"
         
-        // Session 过期时间（毫秒）- 默认 4 小时
-        private const val SESSION_EXPIRE_TIME = 4 * 60 * 60 * 1000L
+        // Session 有效时间（毫秒）- 20 分钟内直接使用，超过则重新获取
+        private const val SESSION_EXPIRE_TIME = 20 * 60 * 1000L
     }
     
     // ==================== 用户管理 ====================
