@@ -55,10 +55,13 @@ class NbuApiService {
     suspend fun validateSession(jsessionId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "验证 Session 有效性...")
+            // 与 getCourses 保持一致的 headers
             val request = Request.Builder()
                 .url(COURSE_URL)
                 .header("Accept", "application/json, text/plain, */*")
+                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
                 .header("Cookie", "JSESSIONID=$jsessionId")
+                .header("Dnt", "1")
                 .header("User-Agent", randomUserAgent())
                 .get()
                 .build()
@@ -175,8 +178,11 @@ class NbuApiService {
             // Step 1: 获取登录页面
             Log.d(TAG, "[Step 1] 获取登录页面...")
             val loginPageUrl = "$LOGIN_BASE_URL?service=$SERVICE_URL"
+            // 模拟 Python requests.Session() 的默认 headers
             val loginPageRequest = Request.Builder()
                 .url(loginPageUrl)
+                .header("Accept", "*/*")
+                .header("Connection", "keep-alive")
                 .header("User-Agent", randomUserAgent())
                 .get()
                 .build()
@@ -226,10 +232,13 @@ class NbuApiService {
                 .add("execution", execution)
                 .build()
 
+            // 模拟 Python requests.Session() 的默认 headers
             val loginRequest = Request.Builder()
                 .url(loginUrl)
-                .header("User-Agent", randomUserAgent())
+                .header("Accept", "*/*")
+                .header("Connection", "keep-alive")
                 .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("User-Agent", randomUserAgent())
                 .post(formBody)
                 .build()
 
@@ -249,8 +258,11 @@ class NbuApiService {
                     var maxRedirects = 10
                     
                     while (maxRedirects > 0) {
+                        // 模拟 Python requests.Session() 的默认 headers
                         val request = Request.Builder()
                             .url(currentUrl)
+                            .header("Accept", "*/*")
+                            .header("Connection", "keep-alive")
                             .header("User-Agent", randomUserAgent())
                             .get()
                             .build()
@@ -342,13 +354,13 @@ class NbuApiService {
      */
     suspend fun getCourses(jsessionId: String): Result<List<Course>> = withContext(Dispatchers.IO) {
         try {
-            // 注意：不要手动设置 Accept-Encoding，让 OkHttp 自动处理压缩
-            // 手动设置可能导致服务器返回压缩数据但 OkHttp 不自动解压
+            // 模拟浏览器环境的 headers，与 signtest.py 的 get_courses 保持一致
             val request = Request.Builder()
                 .url(COURSE_URL)
                 .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
                 .header("Cookie", "JSESSIONID=$jsessionId")
+                .header("Dnt", "1")
                 .header("User-Agent", randomUserAgent())
                 .get()
                 .build()
@@ -431,17 +443,33 @@ class NbuApiService {
             val timeNow = System.currentTimeMillis().toString()
             val codeStr = String.format("%04d", courseCode)
             
-            val url = "$SIGN_URL?timeNow=$timeNow&courseCode=$codeStr&coursePlanId=$coursePlanId&attendanceId=$attendanceId&lng=0&lat=0"
+            // 使用 HttpUrl.Builder 正确构建 URL，自动处理参数编码
+            val url = okhttp3.HttpUrl.Builder()
+                .scheme("https")
+                .host("attendance.nbu.edu.cn")
+                .addPathSegments("api/coursePlan/signByCourseCode")
+                .addQueryParameter("timeNow", timeNow)
+                .addQueryParameter("courseCode", codeStr)
+                .addQueryParameter("coursePlanId", coursePlanId)
+                .addQueryParameter("attendanceId", attendanceId)
+                .addQueryParameter("lng", "0")
+                .addQueryParameter("lat", "0")
+                .build()
 
-            // 注意：不要手动设置 Accept-Encoding，让 OkHttp 自动处理压缩
+            // 模拟浏览器环境的完整 headers，与 signtest.py 保持一致
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
                 .header("Connection", "keep-alive")
+                .header("Content-Type", "application/json;charset=UTF-8")
                 .header("Cookie", "JSESSIONID=$jsessionId")
+                .header("Dnt", "1")
                 .header("Host", "attendance.nbu.edu.cn")
                 .header("Referer", "https://attendance.nbu.edu.cn/h5/student/sign/")
+                .header("Sec-Fetch-Dest", "empty")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Site", "same-origin")
                 .header("User-Agent", randomUserAgent())
                 .header("X-Requested-With", "com.wisedu.cpdaily.nbu")
                 .get()
