@@ -73,14 +73,31 @@ data class CourseData(
     val attendanceId: Any?,   // 可能是 String 或 Long
     val attendanceState: Any? // 可能是 Int 或 String
 ) {
+    /**
+     * 将 Any 类型的 ID 转换为字符串，处理科学计数法问题
+     * Gson 可能将大整数解析为 Double，导致 toString() 产生科学计数法如 "1.73311524E9"
+     */
+    private fun convertIdToString(value: Any?): String? {
+        return when (value) {
+            null -> null
+            is Number -> {
+                // 转为 Long 避免科学计数法
+                val longValue = value.toLong()
+                if (longValue == 0L) null else longValue.toString()
+            }
+            is String -> value.takeIf { it != "null" && it.isNotBlank() && it != "0" }
+            else -> value.toString().takeIf { it != "null" && it.isNotBlank() && it != "0" }
+        }
+    }
+    
     fun toCourse(): Course {
         return Course(
             courseNumber = courseNumber ?: "",
             courseName = courseName ?: "",
             startTime = startTime ?: "",
             endTime = endTime ?: "",
-            coursePlanId = coursePlanId?.toString()?.takeIf { it != "null" && it.isNotBlank() },
-            attendanceId = attendanceId?.toString()?.takeIf { it != "null" && it.isNotBlank() },
+            coursePlanId = convertIdToString(coursePlanId),
+            attendanceId = convertIdToString(attendanceId),
             attendanceState = when (attendanceState) {
                 is Number -> attendanceState.toInt()
                 is String -> attendanceState.toIntOrNull()

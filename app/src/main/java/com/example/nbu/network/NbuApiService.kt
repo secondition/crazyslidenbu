@@ -430,17 +430,9 @@ class NbuApiService {
         } catch (e: Exception) {
             Log.e(TAG, "获取课程异常: ${e.message}")
             Log.e(TAG, "异常堆栈: ${e.stackTraceToString()}")
-            // 提供更友好的错误信息
-            val friendlyMessage = when {
-                e.message?.contains("timeout", ignoreCase = true) == true -> "网络超时，请检查网络连接"
-                e.message?.contains("Unable to resolve host", ignoreCase = true) == true -> "无法连接服务器，请检查网络"
-                e.message?.contains("JsonSyntax", ignoreCase = true) == true -> "解析数据失败，请稍后重试"
-                e.message?.contains("IllegalState", ignoreCase = true) == true -> "数据格式异常，请稍后重试"
-                e.message?.contains("Expected", ignoreCase = true) == true -> "服务器返回格式异常，请稍后重试"
-                e is IllegalStateException -> "数据解析异常，请刷新重试"
-                else -> "获取课程失败，请稍后重试"
-            }
-            return@withContext Result.failure(Exception(friendlyMessage))
+            // 显示原始错误信息，便于调试
+            val errorMessage = e.message ?: "未知错误"
+            return@withContext Result.failure(Exception("获取课程失败: $errorMessage"))
         }
     }
 
@@ -500,15 +492,21 @@ class NbuApiService {
             
             Log.d(TAG, "签到响应: $responseBody, HTTP状态: ${response.code}, 使用JSESSIONID: ${jsessionId.take(10)}...")
 
-            // 解析响应，与 signtest.py 保持一致：
-            // - 包含"错误"认为签到码错误
-            // - 包含"未设置"认为未设置签到码  
-            // - 其他情况（包括成功、20000等）认为签到成功
-            val signResult = when {
-                responseBody.contains("错误") -> SignResult(false, courseCode, "签到码错误")
-                responseBody.contains("未设置") -> SignResult(false, courseCode, "未设置签到码")
-                else -> SignResult(true, courseCode, "签到成功")
+            // 尝试解析 JSON 获取原始错误消息
+            val jsonResponse = try {
+                gson.fromJson(responseBody, SignResponse::class.java)
+            } catch (e: Exception) {
+                null
             }
+            
+            // 判断是否成功：code == 20000 或响应不包含错误关键字
+            val isSuccess = jsonResponse?.code == 20000 || 
+                (!responseBody.contains("错误") && !responseBody.contains("未设置") && jsonResponse?.success == true)
+            
+            // 使用服务器返回的原始消息
+            val message = jsonResponse?.msg ?: responseBody
+            
+            val signResult = SignResult(isSuccess, courseCode, message)
 
             return@withContext Result.success(signResult)
         } catch (e: Exception) {
@@ -516,3 +514,12 @@ class NbuApiService {
         }
     }
 }
+
+/**
+ * 签到响应数据结构
+ */
+data class SignResponse(
+    val code: Int?,
+    val msg: String?,
+    val success: Boolean?
+)
