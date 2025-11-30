@@ -47,6 +47,13 @@ class NbuApiService {
         .followSslRedirects(false)
         .cookieJar(sharedCookieJar)
         .build()
+    
+    // 签到专用 client，不使用 CookieJar，确保手动设置的 Cookie header 不被覆盖
+    private val signClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
 
     /**
      * 预热连接（DNS + TLS）
@@ -450,6 +457,8 @@ class NbuApiService {
             val timeNow = System.currentTimeMillis().toString()
             val codeStr = String.format("%04d", courseCode)
             
+            Log.d(TAG, "签到参数: coursePlanId=$coursePlanId, attendanceId=$attendanceId, courseCode=$codeStr, timeNow=$timeNow")
+            
             // 使用 HttpUrl.Builder 正确构建 URL，自动处理参数编码
             val url = okhttp3.HttpUrl.Builder()
                 .scheme("https")
@@ -462,8 +471,11 @@ class NbuApiService {
                 .addQueryParameter("lng", "0")
                 .addQueryParameter("lat", "0")
                 .build()
+            
+            Log.d(TAG, "签到请求URL: $url")
 
             // 模拟浏览器环境的完整 headers，与 signtest.py 保持一致
+            // 注意：不设置 Accept-Encoding，OkHttp 会自动处理压缩
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/json, text/plain, */*")
@@ -482,16 +494,20 @@ class NbuApiService {
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
+            // 使用 signClient 而不是 client，避免 CookieJar 覆盖手动设置的 Cookie
+            val response = signClient.newCall(request).execute()
             val responseBody = response.body?.string() ?: ""
             
-            Log.d(TAG, "签到响应: $responseBody")
+            Log.d(TAG, "签到响应: $responseBody, HTTP状态: ${response.code}, 使用JSESSIONID: ${jsessionId.take(10)}...")
 
+            // 解析响应，与 signtest.py 保持一致：
+            // - 包含"错误"认为签到码错误
+            // - 包含"未设置"认为未设置签到码  
+            // - 其他情况（包括成功、20000等）认为签到成功
             val signResult = when {
                 responseBody.contains("错误") -> SignResult(false, courseCode, "签到码错误")
                 responseBody.contains("未设置") -> SignResult(false, courseCode, "未设置签到码")
-                responseBody.contains("成功") || responseBody.contains("20000") -> SignResult(true, courseCode, "签到成功")
-                else -> SignResult(false, courseCode, responseBody)
+                else -> SignResult(true, courseCode, "签到成功")
             }
 
             return@withContext Result.success(signResult)
