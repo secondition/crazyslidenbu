@@ -96,7 +96,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:constraint_referenced_ids="tilCode,btnSign"/>
+            app:constraint_referenced_ids="tilCode"/>
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilCode"
@@ -104,14 +104,15 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:hint="签到码"
+            android:hint="输入4位签到码"
             android:textColorHint="@color/text_secondary"
             app:boxStrokeColor="@color/brand_primary"
             app:hintTextColor="@color/brand_primary"
-            android:layout_marginEnd="16dp"
+            app:endIconMode="clear_text"
+            app:endIconTint="@color/text_secondary"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/tvTeacher"
-            app:layout_constraintEnd_toStartOf="@+id/btnSign">
+            app:layout_constraintEnd_toEndOf="parent">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etCode"
@@ -123,16 +124,6 @@
                 android:imeOptions="actionDone" />
 
         </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSign"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="签到"
-            app:backgroundTint="@color/brand_primary"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toBottomOf="@+id/tilCode"
-            app:layout_constraintTop_toTopOf="@+id/tilCode"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

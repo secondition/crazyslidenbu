@@ -1,10 +1,11 @@
 package com.example.nbu.adapter
 
 import android.graphics.Color
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
@@ -50,7 +51,8 @@ class CourseAdapter(
         private val tvTeacher: TextView = itemView.findViewById(R.id.tvTeacher)
         private val signArea: View = itemView.findViewById(R.id.signArea)
         private val etCode: EditText = itemView.findViewById(R.id.etCode)
-        private val btnSign: Button = itemView.findViewById(R.id.btnSign)
+        
+        private var textWatcher: TextWatcher? = null
 
         fun bind(course: Course) {
             tvCourseName.text = course.displayName
@@ -116,6 +118,25 @@ class CourseAdapter(
                 signArea.visibility = View.GONE
             }
             
+            // 移除旧的 TextWatcher，防止重复添加
+            etCode.removeTextChangedListener(textWatcher)
+            
+            // 创建新的 TextWatcher
+            textWatcher = object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    if (s != null && s.length == 4) {
+                        val code = s.toString()
+                        // 自动签到
+                        onSignClick(course, code)
+                        // 清空输入框
+                        etCode.setText("")
+                    }
+                }
+            }
+            etCode.addTextChangedListener(textWatcher)
+            
             // 点击整个卡片切换展开状态
             itemView.setOnClickListener {
                 if (course.isSignable) {
@@ -131,11 +152,6 @@ class CourseAdapter(
                         Toast.makeText(itemView.context, reason, Toast.LENGTH_SHORT).show()
                     }
                 }
-            }
-
-            btnSign.setOnClickListener {
-                val code = etCode.text?.toString()?.trim()
-                onSignClick(course, code?.takeIf { it.isNotEmpty() })
             }
         }
     }
