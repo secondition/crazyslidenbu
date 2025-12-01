@@ -46,6 +46,8 @@ class CourseAdapter(
         private val tvCourseName: TextView = itemView.findViewById(R.id.tvCourseName)
         private val ivStatus: ImageView = itemView.findViewById(R.id.ivStatus)
         private val tvTime: TextView = itemView.findViewById(R.id.tvTime)
+        private val tvClassroom: TextView = itemView.findViewById(R.id.tvClassroom)
+        private val tvTeacher: TextView = itemView.findViewById(R.id.tvTeacher)
         private val signArea: View = itemView.findViewById(R.id.signArea)
         private val etCode: EditText = itemView.findViewById(R.id.etCode)
         private val btnSign: Button = itemView.findViewById(R.id.btnSign)
@@ -53,6 +55,22 @@ class CourseAdapter(
         fun bind(course: Course) {
             tvCourseName.text = course.displayName
             tvTime.text = "${course.startTime} ~ ${course.endTime}"
+            
+            // 显示教室名称
+            if (!course.classroomName.isNullOrBlank()) {
+                tvClassroom.text = course.classroomName
+                tvClassroom.visibility = View.VISIBLE
+            } else {
+                tvClassroom.visibility = View.GONE
+            }
+            
+            // 显示教师名称
+            if (!course.teacherName.isNullOrBlank()) {
+                tvTeacher.text = course.teacherName
+                tvTeacher.visibility = View.VISIBLE
+            } else {
+                tvTeacher.visibility = View.GONE
+            }
 
             // 设置签到状态图标
             // 逻辑：未开放签到显示锁定，已开放签到根据签到状态显示对应图标

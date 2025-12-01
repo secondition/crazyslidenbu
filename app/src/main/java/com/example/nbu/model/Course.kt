@@ -10,7 +10,9 @@ data class Course(
     val endTime: String,
     val coursePlanId: String?,
     val attendanceId: String?,
-    val attendanceState: Int?
+    val attendanceState: Int?,
+    val classroomName: String?,
+    val teacherName: String?
 ) {
     companion object {
         // 测试模式开关：开启后除了未开启签到的课程，其他都能显示签到码输入框
@@ -71,7 +73,9 @@ data class CourseData(
     val endTime: String?,
     val coursePlanId: Any?,  // 可能是 String 或 Long
     val attendanceId: Any?,   // 可能是 String 或 Long
-    val attendanceState: Any? // 可能是 Int 或 String
+    val attendanceState: Any?, // 可能是 Int 或 String
+    val classroomName: String?,
+    val teacherName: String?
 ) {
     /**
      * 将 Any 类型的 ID 转换为字符串，处理科学计数法问题
@@ -102,7 +106,9 @@ data class CourseData(
                 is Number -> attendanceState.toInt()
                 is String -> attendanceState.toIntOrNull()
                 else -> null
-            }
+            },
+            classroomName = classroomName?.takeIf { it.isNotBlank() },
+            teacherName = teacherName?.takeIf { it.isNotBlank() }
         )
     }
 }
