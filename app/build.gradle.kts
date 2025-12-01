@@ -60,6 +60,9 @@ dependencies {
     // RecyclerView for course list
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     
+    // SwipeRefreshLayout for pull-to-refresh
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

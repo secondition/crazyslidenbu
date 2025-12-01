@@ -21,30 +21,25 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- 刷新按钮 -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnRefresh"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="刷新课程列表"
-        android:textColor="@color/brand_primary"
-        android:layout_margin="8dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"/>
-
-    <!-- 课程列表 -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvCourses"
+    <!-- 下拉刷新容器 -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipeRefresh"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:padding="8dp"
-        android:clipToPadding="false"
         app:layout_constraintTop_toBottomOf="@+id/toolbar"
-        app:layout_constraintBottom_toTopOf="@+id/btnRefresh"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- 课程列表 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvCourses"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="8dp"
+            android:clipToPadding="false"/>
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <!-- 空状态提示 -->
     <LinearLayout
@@ -55,7 +50,7 @@
         android:gravity="center"
         android:visibility="gone"
         app:layout_constraintTop_toBottomOf="@+id/toolbar"
-        app:layout_constraintBottom_toTopOf="@+id/btnRefresh"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -72,6 +67,14 @@
             android:textSize="16sp"
             android:textColor="@color/text_secondary"
             android:layout_marginTop="16dp" />
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="下拉刷新"
+            android:textSize="14sp"
+            android:textColor="@color/text_hint"
+            android:layout_marginTop="8dp" />
 
     </LinearLayout>
 
@@ -84,7 +87,7 @@
         android:gravity="center"
         android:visibility="gone"
         app:layout_constraintTop_toBottomOf="@+id/toolbar"
-        app:layout_constraintBottom_toTopOf="@+id/btnRefresh"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 

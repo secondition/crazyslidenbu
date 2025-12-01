@@ -76,7 +76,9 @@ class SignActivity : AppCompatActivity() {
         binding.rvCourses.layoutManager = LinearLayoutManager(this)
         binding.rvCourses.adapter = adapter
 
-        binding.btnRefresh.setOnClickListener {
+        // 设置下拉刷新
+        binding.swipeRefresh.setColorSchemeResources(R.color.brand_primary)
+        binding.swipeRefresh.setOnRefreshListener {
             loadCourses()
         }
 
@@ -173,14 +175,17 @@ class SignActivity : AppCompatActivity() {
 
     private fun setLoadingState(isLoading: Boolean, message: String = "") {
         if (isLoading) {
-            binding.loadingView.visibility = View.VISIBLE
-            binding.rvCourses.visibility = View.GONE
-            binding.emptyView.visibility = View.GONE
-            binding.tvLoadingStatus.text = message
+            // 首次加载时显示加载视图，下拉刷新时不显示
+            if (!binding.swipeRefresh.isRefreshing) {
+                binding.loadingView.visibility = View.VISIBLE
+                binding.rvCourses.visibility = View.GONE
+                binding.emptyView.visibility = View.GONE
+                binding.tvLoadingStatus.text = message
+            }
         } else {
             binding.loadingView.visibility = View.GONE
+            binding.swipeRefresh.isRefreshing = false
         }
-        binding.btnRefresh.isEnabled = !isLoading
     }
 
     private fun showEmptyState() {
