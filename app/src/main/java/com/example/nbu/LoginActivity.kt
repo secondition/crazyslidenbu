@@ -173,6 +173,14 @@ class LoginActivity : AppCompatActivity() {
             .create()
             
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        
+        // 防止用户连续点击版本号时误关闭对话框（先禁用点击外部关闭，500ms后恢复）
+        dialog.setCanceledOnTouchOutside(false)
+        binding.root.postDelayed({
+            if (dialog.isShowing) {
+                dialog.setCanceledOnTouchOutside(true)
+            }
+        }, 500)
             
         fun refreshList() {
             dialogBinding.llUserList.removeAllViews()
