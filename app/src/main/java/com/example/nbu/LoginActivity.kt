@@ -11,8 +11,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
-import android.widget.ArrayAdapter
-import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,7 +42,6 @@ class LoginActivity : AppCompatActivity() {
     // 使用全局共享的 ApiService（已预加载登录页面）
     private val apiService by lazy { NbuApplication.apiService }
     private lateinit var userManager: UserManager
-    private var userAdapter: ArrayAdapter<DropdownItem>? = null
     
     // 版本号连续点击计数
     private var versionClickCount = 0
@@ -52,16 +49,10 @@ class LoginActivity : AppCompatActivity() {
     private val VERSION_CLICK_TIMEOUT = 1000L // 1秒内的点击才算连续点击
     private val VERSION_CLICK_TARGET = 5 // 需要连续点击5次
 
-    // 用于接收 SignActivity 返回结果
+    // 用于启动 SignActivity
     private val signActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == SignActivity.RESULT_CLEAR_INPUT) {
-            // 清除输入框内容
-            binding.etUsername.setText("")
-            binding.etPassword.setText("")
-        }
-    }
+    ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,7 +65,7 @@ class LoginActivity : AppCompatActivity() {
         userManager = UserManager(this)
         
         setupViews()
-        loadUsers()
+        loadLastLogin()
         showVersionInfo()
     }
 
@@ -90,18 +81,6 @@ class LoginActivity : AppCompatActivity() {
             hideKeyboard()
             performLogin()
             true
-        }
-        
-        // 用户名下拉选择监听
-        (binding.etUsername as? AutoCompleteTextView)?.setOnItemClickListener { _, _, position, _ ->
-            val selectedItem = userAdapter?.getItem(position) ?: return@setOnItemClickListener
-            
-            if (selectedItem is DropdownItem.UserItem) {
-                // 选择了一个用户
-                val user = selectedItem.user
-                binding.etUsername.setText(user.username)
-                binding.etPassword.setText(user.password)
-            }
         }
 
         // 版本号连续点击5次打开账号管理
@@ -123,21 +102,6 @@ class LoginActivity : AppCompatActivity() {
                 showUserManagementDialog()
             }
         }
-    }
-    
-    /**
-     * 加载已保存的用户列表到下拉框
-     */
-    private fun loadUsers() {
-        val users = userManager.getAllUsers()
-        val items = mutableListOf<DropdownItem>()
-        
-        // 添加所有用户
-        items.addAll(users.map { DropdownItem.UserItem(it) })
-        
-        userAdapter = UserDropdownAdapter(this, items)
-        
-        (binding.etUsername as? AutoCompleteTextView)?.setAdapter(userAdapter)
     }
     
     /**
@@ -186,7 +150,6 @@ class LoginActivity : AppCompatActivity() {
             
             val user = User(username, password, remark)
             userManager.saveUser(user)
-            loadUsers()
             
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
             
@@ -253,7 +216,6 @@ class LoginActivity : AppCompatActivity() {
                         .setPositiveButton("删除") { _, _ ->
                             userManager.deleteUser(user.username)
                             refreshList()
-                            loadUsers()
                         }
                         .setNegativeButton("取消", null)
                         .show()
@@ -303,6 +265,9 @@ class LoginActivity : AppCompatActivity() {
         } else {
             binding.tilPassword.error = null
         }
+        
+        // 保存当前登录的账号密码
+        userManager.saveLastLogin(username, password)
 
         // 检查是否有该用户的缓存 Session（5分钟内有效）
         val cachedSession = userManager.getCachedSession(username)
@@ -381,6 +346,17 @@ class LoginActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * 加载上次登录的账号密码
+     */
+    private fun loadLastLogin() {
+        val lastLogin = userManager.getLastLogin()
+        if (lastLogin != null) {
+            binding.etUsername.setText(lastLogin.first)
+            binding.etPassword.setText(lastLogin.second)
+        }
+    }
+    
     private fun showVersionInfo() {
         try {
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
@@ -413,29 +389,5 @@ class LoginActivity : AppCompatActivity() {
         } catch (e: Exception) {
             // 忽略振动失败
         }
-    }
-}
-
-sealed class DropdownItem {
-    data class UserItem(val user: User) : DropdownItem() {
-        override fun toString(): String = user.displayName
-    }
-}
-
-class UserDropdownAdapter(context: Context, items: List<DropdownItem>) : 
-    ArrayAdapter<DropdownItem>(context, 0, items) {
-
-    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-        val view = convertView ?: LayoutInflater.from(context).inflate(R.layout.item_user_dropdown, parent, false)
-        
-        val item = getItem(position)
-        val tvTitle = view.findViewById<TextView>(R.id.tvTitle)
-        
-        if (item is DropdownItem.UserItem) {
-            tvTitle.text = item.user.displayName
-            tvTitle.setTextColor(context.getColor(R.color.text_primary))
-        }
-        
-        return view
     }
 }

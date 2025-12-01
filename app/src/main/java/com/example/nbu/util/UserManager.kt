@@ -19,6 +19,8 @@ class UserManager(context: Context) {
         private const val KEY_USERS = "users"
         private const val KEY_PREFIX_JSESSIONID = "jsessionid_"
         private const val KEY_PREFIX_SAVE_TIME = "save_time_"
+        private const val KEY_LAST_USERNAME = "last_username"
+        private const val KEY_LAST_PASSWORD = "last_password"
         
         // Session 有效时间（毫秒）- 20 分钟内直接使用，超过则重新获取
         private const val SESSION_EXPIRE_TIME = 20 * 60 * 1000L
@@ -118,5 +120,30 @@ class UserManager(context: Context) {
             .remove(KEY_PREFIX_JSESSIONID + username)
             .remove(KEY_PREFIX_SAVE_TIME + username)
             .apply()
+    }
+    
+    // ==================== 最后登录账号管理 ====================
+    
+    /**
+     * 保存最后登录的账号密码
+     */
+    fun saveLastLogin(username: String, password: String) {
+        prefs.edit()
+            .putString(KEY_LAST_USERNAME, username)
+            .putString(KEY_LAST_PASSWORD, password)
+            .apply()
+    }
+    
+    /**
+     * 获取最后登录的账号密码
+     */
+    fun getLastLogin(): Pair<String, String>? {
+        val username = prefs.getString(KEY_LAST_USERNAME, null)
+        val password = prefs.getString(KEY_LAST_PASSWORD, null)
+        return if (username != null && password != null) {
+            Pair(username, password)
+        } else {
+            null
+        }
     }
 }

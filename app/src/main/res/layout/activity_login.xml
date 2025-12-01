@@ -74,10 +74,10 @@
                 android:orientation="vertical"
                 android:padding="32dp">
 
-                <!-- 用户名输入框（带下拉选择） -->
+                <!-- 用户名输入框 -->
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/tilUsername"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
@@ -88,15 +88,13 @@
                     app:startIconDrawable="@drawable/ic_user_alien"
                     app:startIconTint="@color/text_secondary">
 
-                    <AutoCompleteTextView
+                    <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etUsername"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="text"
                         android:maxLines="1"
                         android:textColor="@color/text_primary"
-                        android:dropDownVerticalOffset="4dp"
-                        android:popupBackground="@drawable/bg_popup_menu"
                         android:imeOptions="actionNext" />
 
                 </com.google.android.material.textfield.TextInputLayout>

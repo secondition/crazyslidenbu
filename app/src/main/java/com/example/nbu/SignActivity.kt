@@ -24,7 +24,6 @@ class SignActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_JSESSION_ID = "jsession_id"
         const val EXTRA_USERNAME = "username"
-        const val RESULT_CLEAR_INPUT = 1001
     }
 
     private lateinit var binding: ActivitySignBinding
@@ -83,8 +82,6 @@ class SignActivity : AppCompatActivity() {
         }
 
         binding.toolbar.setNavigationOnClickListener {
-            // 设置结果码通知 LoginActivity 清除输入框
-            setResult(RESULT_CLEAR_INPUT)
             onBackPressedDispatcher.onBackPressed()
         }
     }
