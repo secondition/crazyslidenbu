@@ -139,26 +139,6 @@
                     app:cornerRadius="8dp"
                     app:backgroundTint="@color/brand_primary" />
 
-                <!-- 底部操作区 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center"
-                    android:layout_marginTop="16dp">
-
-                    <TextView
-                        android:id="@+id/btnManageUsers"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="管理账户"
-                        android:textColor="@color/brand_primary"
-                        android:textSize="14sp"
-                        android:padding="8dp"
-                        android:background="?attr/selectableItemBackground"/>
-                    
-                </LinearLayout>
-
                 <!-- 加载进度 -->
                 <com.google.android.material.progressindicator.CircularProgressIndicator
                     android:id="@+id/progressBar"
@@ -190,7 +170,7 @@
             android:id="@+id/tvVersion"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="32dp"
             android:textSize="12sp"
             android:textColor="@color/text_secondary"
             app:layout_constraintStart_toStartOf="parent"

@@ -2,7 +2,11 @@ package com.example.nbu
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -41,6 +45,12 @@ class LoginActivity : AppCompatActivity() {
     private val apiService by lazy { NbuApplication.apiService }
     private lateinit var userManager: UserManager
     private var userAdapter: ArrayAdapter<DropdownItem>? = null
+    
+    // 版本号连续点击计数
+    private var versionClickCount = 0
+    private var lastVersionClickTime = 0L
+    private val VERSION_CLICK_TIMEOUT = 1000L // 1秒内的点击才算连续点击
+    private val VERSION_CLICK_TARGET = 5 // 需要连续点击5次
 
     // 用于接收 SignActivity 返回结果
     private val signActivityLauncher = registerForActivityResult(
@@ -94,9 +104,24 @@ class LoginActivity : AppCompatActivity() {
             }
         }
 
-        // 管理账户按钮
-        binding.btnManageUsers.setOnClickListener {
-            showUserManagementDialog()
+        // 版本号连续点击5次打开账号管理
+        binding.tvVersion.setOnClickListener {
+            // 添加振动反馈
+            performVibration()
+            
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastVersionClickTime > VERSION_CLICK_TIMEOUT) {
+                // 超时，重置计数
+                versionClickCount = 1
+            } else {
+                versionClickCount++
+            }
+            lastVersionClickTime = currentTime
+            
+            if (versionClickCount >= VERSION_CLICK_TARGET) {
+                versionClickCount = 0
+                showUserManagementDialog()
+            }
         }
     }
     
@@ -363,6 +388,30 @@ class LoginActivity : AppCompatActivity() {
             binding.tvVersion.text = "v$versionName"
         } catch (e: Exception) {
             binding.tvVersion.text = ""
+        }
+    }
+    
+    /**
+     * 执行振动反馈
+     */
+    private fun performVibration() {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(50)
+            }
+        } catch (e: Exception) {
+            // 忽略振动失败
         }
     }
 }
