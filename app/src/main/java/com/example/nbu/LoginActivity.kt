@@ -2,11 +2,7 @@ package com.example.nbu
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -41,12 +37,6 @@ class LoginActivity : AppCompatActivity() {
     private val apiService by lazy { NbuApplication.apiService }
     private lateinit var userManager: UserManager
     
-    // 版本号连续点击计数
-    private var versionClickCount = 0
-    private var lastVersionClickTime = 0L
-    private val VERSION_CLICK_TIMEOUT = 1000L // 1秒内的点击才算连续点击
-    private val VERSION_CLICK_TARGET = 5 // 需要连续点击5次
-
     // 用于启动 SignActivity
     private val signActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -64,7 +54,6 @@ class LoginActivity : AppCompatActivity() {
         
         setupViews()
         loadLastLogin()
-        showVersionInfo()
     }
 
     private fun setupViews() {
@@ -81,24 +70,8 @@ class LoginActivity : AppCompatActivity() {
             true
         }
 
-        // 版本号连续点击5次打开账号管理
-        binding.tvVersion.setOnClickListener {
-            // 添加振动反馈
-            performVibration()
-            
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastVersionClickTime > VERSION_CLICK_TIMEOUT) {
-                // 超时，重置计数
-                versionClickCount = 1
-            } else {
-                versionClickCount++
-            }
-            lastVersionClickTime = currentTime
-            
-            if (versionClickCount >= VERSION_CLICK_TARGET) {
-                versionClickCount = 0
-                showUserManagementDialog()
-            }
+        binding.tvTitle.setOnClickListener {
+            showUserManagementDialog()
         }
     }
     
@@ -172,14 +145,6 @@ class LoginActivity : AppCompatActivity() {
             
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         
-        // 防止用户连续点击版本号时误关闭对话框（先禁用点击外部关闭，500ms后恢复）
-        dialog.setCanceledOnTouchOutside(false)
-        binding.root.postDelayed({
-            if (dialog.isShowing) {
-                dialog.setCanceledOnTouchOutside(true)
-            }
-        }, 500)
-            
         fun refreshList() {
             dialogBinding.llUserList.removeAllViews()
             val users = userManager.getAllUsers()
@@ -341,7 +306,7 @@ class LoginActivity : AppCompatActivity() {
         binding.btnLogin.isEnabled = !isLoading
         binding.etUsername.isEnabled = !isLoading
         binding.etPassword.isEnabled = !isLoading
-        binding.tvVersion.isEnabled = !isLoading
+        binding.tvTitle.isEnabled = !isLoading
 
         if (isLoading) {
             binding.progressBar.visibility = View.VISIBLE
@@ -376,38 +341,5 @@ class LoginActivity : AppCompatActivity() {
             binding.etPassword.setText(lastLogin.second)
         }
     }
-    
-    private fun showVersionInfo() {
-        try {
-            val packageInfo = packageManager.getPackageInfo(packageName, 0)
-            val versionName = packageInfo.versionName
-            binding.tvVersion.text = "v$versionName"
-        } catch (e: Exception) {
-            binding.tvVersion.text = ""
-        }
-    }
-    
-    /**
-     * 执行振动反馈
-     */
-    private fun performVibration() {
-        try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                vibratorManager.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            }
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(50)
-            }
-        } catch (e: Exception) {
-            // 忽略振动失败
-        }
-    }
+
 }
