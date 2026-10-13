@@ -5,69 +5,28 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 
 /**
- * 简单的 CookieJar 实现，用于管理 cookies
+ * 按域名、路径和有效期管理认证 Cookie。
  */
 class SimpleCookieJar : CookieJar {
-    
-    private val cookieStore = mutableMapOf<String, MutableList<Cookie>>()
-    
+
+    private val cookieStore = mutableListOf<Cookie>()
+
+    @Synchronized
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-        val host = url.host
-        if (cookieStore[host] == null) {
-            cookieStore[host] = mutableListOf()
-        }
-        
-        // 更新或添加 cookie
-        for (newCookie in cookies) {
-            cookieStore[host]?.removeAll { it.name == newCookie.name }
-            cookieStore[host]?.add(newCookie)
+        for (cookie in cookies) {
+            cookieStore.removeAll {
+                it.name == cookie.name && it.domain == cookie.domain && it.path == cookie.path
+            }
+            if (cookie.expiresAt > System.currentTimeMillis()) cookieStore.add(cookie)
         }
     }
-    
+
+    @Synchronized
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
-        val host = url.host
-        val now = System.currentTimeMillis()
-        return cookieStore[host]?.filter { it.expiresAt > now } ?: emptyList()
+        cookieStore.removeAll { it.expiresAt <= System.currentTimeMillis() }
+        return cookieStore.filter { it.matches(url) }.sortedByDescending { it.path.length }
     }
-    
-    /**
-     * 获取指定域名的 JSESSIONID
-     */
-    fun getJSessionId(domain: String): String? {
-        // 精确匹配
-        val cookies = cookieStore[domain]
-        val jsessionId = cookies?.find { it.name == "JSESSIONID" }?.value
-        if (jsessionId != null) return jsessionId
-        
-        // 模糊匹配
-        for ((host, hostCookies) in cookieStore) {
-            if (host.contains(domain) || domain.contains(host)) {
-                val cookie = hostCookies.find { it.name == "JSESSIONID" }
-                if (cookie != null) return cookie.value
-            }
-        }
-        
-        return null
-    }
-    
-    /**
-     * 获取所有 cookies 用于调试
-     */
-    fun getAllCookies(): String {
-        val sb = StringBuilder()
-        for ((host, cookies) in cookieStore) {
-            sb.append("[$host]:\n")
-            for (cookie in cookies) {
-                sb.append("  ${cookie.name}=${cookie.value.take(20)}...\n")
-            }
-        }
-        return sb.toString()
-    }
-    
-    /**
-     * 清除所有 cookies
-     */
-    fun clear() {
-        cookieStore.clear()
-    }
+
+    fun getJSessionId(url: HttpUrl): String? =
+        loadForRequest(url).firstOrNull { it.name == "JSESSIONID" }?.value
 }

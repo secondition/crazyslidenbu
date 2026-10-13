@@ -10,6 +10,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.graphics.toColorInt
 import androidx.recyclerview.widget.RecyclerView
 import com.example.nbu.R
 import com.example.nbu.model.Course
@@ -88,22 +89,22 @@ class CourseAdapter(
                 course.attendanceState == 1 -> {
                     // 已签到
                     iconRes = R.drawable.ic_status_check
-                    iconTint = Color.parseColor("#4CAF50") // Green
+                    iconTint = "#4CAF50".toColorInt() // Green
                 }
                 course.attendanceState == 2 -> {
                     // 迟到
                     iconRes = R.drawable.ic_status_late
-                    iconTint = Color.parseColor("#FF9800") // Orange
+                    iconTint = "#FF9800".toColorInt() // Orange
                 }
                 course.attendanceState == 3 -> {
                     // 请假
                     iconRes = R.drawable.ic_status_leave
-                    iconTint = Color.parseColor("#2196F3") // Blue
+                    iconTint = "#2196F3".toColorInt() // Blue
                 }
                 else -> {
                     // 未签到（签到已开放但尚未签到，attendanceState == 0 或 null）
                     iconRes = R.drawable.ic_status_close
-                    iconTint = Color.parseColor("#F44336") // Red
+                    iconTint = "#F44336".toColorInt() // Red
                 }
             }
 

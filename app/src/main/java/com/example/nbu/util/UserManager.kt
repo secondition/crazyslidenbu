@@ -2,9 +2,11 @@ package com.example.nbu.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.example.nbu.model.User
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.util.UUID
 
 /**
  * 用户管理器 - 用于管理多用户账号信息和 JSESSIONID 缓存
@@ -22,8 +24,8 @@ class UserManager(context: Context) {
         private const val KEY_LAST_USERNAME = "last_username"
         private const val KEY_LAST_PASSWORD = "last_password"
         
-        // Session 有效时间（毫秒）- 20 分钟内直接使用，超过则重新获取
-        private const val SESSION_EXPIRE_TIME = 20 * 60 * 1000L
+        private const val KEY_FINGERPRINT = "fingerprint"
+        private const val SESSION_EXPIRE_TIME = 24 * 60 * 60 * 1000L
     }
     
     // ==================== 用户管理 ====================
@@ -81,19 +83,26 @@ class UserManager(context: Context) {
      */
     private fun saveUsers(users: List<User>) {
         val json = gson.toJson(users)
-        prefs.edit().putString(KEY_USERS, json).apply()
+        prefs.edit { putString(KEY_USERS, json) }
     }
     
+    fun getFingerprint(): String {
+        prefs.getString(KEY_FINGERPRINT, null)?.let { return it }
+        val fingerprint = UUID.randomUUID().toString().replace("-", "").uppercase()
+        prefs.edit { putString(KEY_FINGERPRINT, fingerprint) }
+        return fingerprint
+    }
+
     // ==================== Session 缓存管理 ====================
     
     /**
      * 保存 JSESSIONID（按用户名存储）
      */
     fun saveSession(username: String, jsessionId: String) {
-        prefs.edit()
-            .putString(KEY_PREFIX_JSESSIONID + username, jsessionId)
-            .putLong(KEY_PREFIX_SAVE_TIME + username, System.currentTimeMillis())
-            .apply()
+        prefs.edit {
+            putString(KEY_PREFIX_JSESSIONID + username, jsessionId)
+            putLong(KEY_PREFIX_SAVE_TIME + username, System.currentTimeMillis())
+        }
     }
     
     /**
@@ -104,7 +113,7 @@ class UserManager(context: Context) {
         val saveTime = prefs.getLong(KEY_PREFIX_SAVE_TIME + username, 0)
         
         // 检查是否过期
-        if (System.currentTimeMillis() - saveTime > SESSION_EXPIRE_TIME) {
+        if (System.currentTimeMillis() - saveTime >= SESSION_EXPIRE_TIME) {
             clearSession(username)
             return null
         }
@@ -116,10 +125,10 @@ class UserManager(context: Context) {
      * 清除指定用户的 Session
      */
     fun clearSession(username: String) {
-        prefs.edit()
-            .remove(KEY_PREFIX_JSESSIONID + username)
-            .remove(KEY_PREFIX_SAVE_TIME + username)
-            .apply()
+        prefs.edit {
+            remove(KEY_PREFIX_JSESSIONID + username)
+            remove(KEY_PREFIX_SAVE_TIME + username)
+        }
     }
     
     // ==================== 最后登录账号管理 ====================
@@ -128,10 +137,10 @@ class UserManager(context: Context) {
      * 保存最后登录的账号密码
      */
     fun saveLastLogin(username: String, password: String) {
-        prefs.edit()
-            .putString(KEY_LAST_USERNAME, username)
-            .putString(KEY_LAST_PASSWORD, password)
-            .apply()
+        prefs.edit {
+            putString(KEY_LAST_USERNAME, username)
+            putString(KEY_LAST_PASSWORD, password)
+        }
     }
     
     /**

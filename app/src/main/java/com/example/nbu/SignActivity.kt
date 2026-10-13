@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.nbu.adapter.CourseAdapter
 import com.example.nbu.databinding.ActivitySignBinding
 import com.example.nbu.model.Course
+import com.example.nbu.network.SessionExpiredException
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
 import kotlinx.coroutines.launch
@@ -105,7 +106,7 @@ class SignActivity : AppCompatActivity() {
                 
                 val errorMsg = error.message ?: ""
                 // 检查是否是 Session 失效
-                if (errorMsg.contains("未登录") || errorMsg.contains("登录失效") || errorMsg.contains("401")) {
+                if (error is SessionExpiredException) {
                     handleSessionExpired()
                 } else {
                     Toast.makeText(
@@ -165,7 +166,11 @@ class SignActivity : AppCompatActivity() {
                     Toast.makeText(this@SignActivity, "签到失败: ${signResult.message}", Toast.LENGTH_SHORT).show()
                 }
             }.onFailure { error ->
-                Toast.makeText(this@SignActivity, "签到出错: ${error.message}", Toast.LENGTH_SHORT).show()
+                if (error is SessionExpiredException) {
+                    handleSessionExpired()
+                } else {
+                    Toast.makeText(this@SignActivity, "签到出错: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

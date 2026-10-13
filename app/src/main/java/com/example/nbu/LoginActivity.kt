@@ -9,7 +9,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import android.widget.Toast
@@ -21,20 +20,19 @@ import androidx.lifecycle.lifecycleScope
 import com.example.nbu.databinding.ActivityLoginBinding
 import com.example.nbu.databinding.DialogAddUserBinding
 import com.example.nbu.databinding.DialogUserManagementBinding
+import com.example.nbu.databinding.DialogVerificationBinding
 import com.example.nbu.model.User
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 
 /**
  * 登录界面
- * 
- * 登录流程：
- * 1. 输入/选择用户名密码，点击登录
- * 2. 检查该用户是否有缓存的有效 JSESSIONID
- * 3. 如果有且有效，直接使用缓存
- * 4. 如果没有或已过期/失效，自动通过 UIS 获取新的 JSESSIONID
- * 5. 更新缓存并跳转到签到界面
  */
 class LoginActivity : AppCompatActivity() {
 
@@ -256,6 +254,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun performLogin() {
+        if (!binding.btnLogin.isEnabled) return
         val username = binding.etUsername.text?.toString()?.trim() ?: ""
         val password = binding.etPassword.text?.toString() ?: ""
 
@@ -274,47 +273,60 @@ class LoginActivity : AppCompatActivity() {
             binding.tilPassword.error = null
         }
         
-        // 保存当前登录的账号密码
-        userManager.saveLastLogin(username, password)
-
-        // 检查是否有该用户的缓存 Session（5分钟内有效）
-        val cachedSession = userManager.getCachedSession(username)
-        
-        if (cachedSession != null) {
-            // 5分钟内的缓存，直接使用（不验证）
-            Toast.makeText(
-                this@LoginActivity, 
-                "✓ 登录成功（使用缓存Session）", 
-                Toast.LENGTH_SHORT
-            ).show()
-            navigateToSignActivity(cachedSession, username)
-        } else {
-            // 无缓存或已过期，通过 UIS 登录
-            setLoadingState(true, "正在登录...")
-            lifecycleScope.launch {
-                loginViaUis(username, password)
+        setLoadingState(true, "正在登录...")
+        lifecycleScope.launch {
+            try {
+                var session = userManager.getCachedSession(username)
+                if (session != null && !apiService.validateSession(session, username).getOrThrow()) {
+                    userManager.clearSession(username)
+                    session = null
+                }
+                if (session == null) {
+                    session = apiService.login(username, password, userManager.getFingerprint(), ::requestVerificationCode)
+                        .getOrThrow()
+                    userManager.saveSession(username, session)
+                }
+                userManager.saveLastLogin(username, password)
+                binding.tvStatus.visibility = View.GONE
+                Toast.makeText(this@LoginActivity, "✓ 登录成功", Toast.LENGTH_SHORT).show()
+                navigateToSignActivity(session, username)
+            } catch (e: CancellationException) {
+                binding.tvStatus.visibility = View.GONE
+                throw e
+            } catch (e: Exception) {
+                showError(e.message ?: "登录失败")
+            } finally {
+                setLoadingState(false)
             }
         }
     }
-    
-    /**
-     * 通过 UIS 统一身份认证登录
-     */
-    private suspend fun loginViaUis(username: String, password: String) {
-        val result = apiService.login(username, password)
-        
-        result.onSuccess { jsessionId ->
-            setLoadingState(false)
-            
-            // 保存 Session 到缓存
-            userManager.saveSession(username, jsessionId)
-            
-            Toast.makeText(this, "✓ 登录成功（新Session）", Toast.LENGTH_SHORT).show()
-            
-            navigateToSignActivity(jsessionId, username)
-        }.onFailure { error ->
-            setLoadingState(false)
-            showError(error.message ?: "登录失败")
+
+    private suspend fun requestVerificationCode(message: String): String? = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { continuation ->
+            val dialogBinding = DialogVerificationBinding.inflate(layoutInflater)
+            val dialog = MaterialAlertDialogBuilder(this@LoginActivity)
+                .setTitle("验证登录设备")
+                .setMessage(message)
+                .setView(dialogBinding.root)
+                .setPositiveButton("验证", null)
+                .setNegativeButton("取消", null)
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val code = dialogBinding.etCode.text?.toString()?.trim().orEmpty()
+                    if (code.isEmpty()) {
+                        dialogBinding.root.error = "请输入风华宁大验证码"
+                    } else if (continuation.isActive) {
+                        continuation.resume(code)
+                        dialog.dismiss()
+                    }
+                }
+            }
+            dialog.setOnDismissListener {
+                if (continuation.isActive) continuation.resume(null)
+            }
+            continuation.invokeOnCancellation { binding.root.post { dialog.dismiss() } }
+            dialog.show()
         }
     }
     
@@ -329,7 +341,8 @@ class LoginActivity : AppCompatActivity() {
         binding.btnLogin.isEnabled = !isLoading
         binding.etUsername.isEnabled = !isLoading
         binding.etPassword.isEnabled = !isLoading
-        
+        binding.tvVersion.isEnabled = !isLoading
+
         if (isLoading) {
             binding.progressBar.visibility = View.VISIBLE
             binding.tvStatus.visibility = View.VISIBLE
@@ -337,7 +350,6 @@ class LoginActivity : AppCompatActivity() {
             binding.tvStatus.setTextColor(getColor(android.R.color.darker_gray))
         } else {
             binding.progressBar.visibility = View.GONE
-            binding.tvStatus.visibility = View.GONE
         }
     }
 

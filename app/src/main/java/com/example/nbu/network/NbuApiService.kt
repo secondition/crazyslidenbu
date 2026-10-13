@@ -1,525 +1,344 @@
 package com.example.nbu.network
 
-import android.util.Base64
 import android.util.Log
 import com.example.nbu.model.Course
 import com.example.nbu.model.CourseResponse
 import com.example.nbu.model.SignResult
 import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.FormBody
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.net.URLEncoder
+import okhttp3.Response
+import java.io.IOException
+import java.util.Base64
 import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.random.Random
 
 /**
- * NBU API 服务
- * 参考 logintest.py 和 signtest.py 实现
+ * NBU 统一身份认证与考勤服务
  */
 class NbuApiService {
 
     companion object {
         private const val TAG = "NbuApiService"
         private const val AES_CHARS = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
-        private const val LOGIN_BASE_URL = "https://uis.nbu.edu.cn/authserver/login"
+        private const val AUTH_URL = "https://uis.nbu.edu.cn/authserver/"
+        private const val LOGIN_URL = "${AUTH_URL}login"
         private const val SERVICE_URL = "https://attendance.nbu.edu.cn/api/getIndex"
+        private const val USER_INFO_URL = "https://attendance.nbu.edu.cn/api/user/get/user/info"
         private const val COURSE_URL = "https://attendance.nbu.edu.cn/api/curriculum/student/getCourse"
         private const val SIGN_URL = "https://attendance.nbu.edu.cn/api/coursePlan/signByCourseCode"
     }
 
     private val gson = Gson()
-    
-    // 使用共享的 CookieJar
-    private val sharedCookieJar = SimpleCookieJar()
-    
+    private val userAgent = "Mozilla/5.0 (Linux; Android 17; wv) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Version/4.0 Chrome/155.0.${Random.nextInt(8000)}.${Random.nextInt(200)} " +
+        "Mobile Safari/537.36 cpdaily/9.9.10 wisedu/9.9.10"
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .followRedirects(false) // 禁用自动重定向，手动处理
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(15, TimeUnit.SECONDS)
+        .followRedirects(false)
         .followSslRedirects(false)
-        .cookieJar(sharedCookieJar)
-        .build()
-    
-    // 签到专用 client，不使用 CookieJar，确保手动设置的 Cookie header 不被覆盖
-    private val signClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    /**
-     * 预热连接（DNS + TLS）
-     * 通过 HEAD 请求预热连接，不消耗 execution 参数
-     */
-    suspend fun preloadLoginPage() = withContext(Dispatchers.IO) {
-        try {
-            val startTime = System.currentTimeMillis()
-            Log.d(TAG, "[预热] 开始预热连接...")
-            
-            // 使用 HEAD 请求预热 DNS + TLS 连接，不获取实际内容
-            val warmupRequest = Request.Builder()
-                .url(LOGIN_BASE_URL)
-                .head()  // HEAD 请求，只建立连接，不获取响应体
-                .header("Connection", "keep-alive")
-                .header("User-Agent", randomUserAgent())
-                .build()
+    suspend fun preloadLoginPage() {
+        result {
+            execute(client, request(LOGIN_URL).head().build())
+        }.onFailure { Log.d(TAG, "预热连接失败", it) }
+    }
 
-            val response = client.newCall(warmupRequest).execute()
-            response.close()  // 立即关闭，但连接会保持在连接池中
-            
-            Log.d(TAG, "[预热] 完成，耗时: ${System.currentTimeMillis() - startTime} ms，连接已缓存")
-        } catch (e: Exception) {
-            Log.e(TAG, "[预热] 异常: ${e.message}")
+    /**
+     * 每次认证使用独立 CookieJar，避免多个账号共享认证状态。
+     */
+    suspend fun login(
+        username: String,
+        password: String,
+        fingerprint: String,
+        requestCode: suspend (String) -> String?
+    ): Result<String> = result {
+        val cookies = SimpleCookieJar()
+        val loginClient = client.newBuilder().cookieJar(cookies).build()
+        val loginUrl = LOGIN_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("service", SERVICE_URL)
+            .build()
+        val page = execute(loginClient, request(loginUrl.toString()).build())
+        page.requireSuccess("获取登录页面失败")
+        val salt = capture(page.text, """id="pwdEncryptSalt"\s+value="([^"]*)"""")
+            ?: error("登录页缺少 pwdEncryptSalt")
+        val execution = capture(page.text, """name="execution"\s+value="([^"]*)"""")
+            ?: error("登录页缺少 execution")
+        val eventId = capture(page.text, """id="_eventId"\s+name="_eventId"\s+value="([^"]*)"""")
+            ?: "submit"
+        val cllt = capture(page.text, """id="pwdLoginDiv"[\s\S]*?id="cllt"\s+name="cllt"\s+value="([^"]*)"""")
+            ?: "userNameLogin"
+        val dllt = capture(page.text, """id="dllt"\s+name="dllt"\s+value="([^"]*)"""")
+            ?: "generalLogin"
+        val fingerprintUrl = "${AUTH_URL}bfp/info".toHttpUrl().newBuilder()
+            .addQueryParameter("bfp", fingerprint)
+            .build()
+        execute(
+            loginClient,
+            request(fingerprintUrl.toString()).header("X-Requested-With", "XMLHttpRequest").build()
+        ).requireSuccess("设置设备指纹失败")
+
+        val form = FormBody.Builder()
+            .add("username", username)
+            .add("password", encryptPassword(password, salt))
+            .add("captcha", "")
+            .add("_eventId", eventId)
+            .add("cllt", cllt)
+            .add("dllt", dllt)
+            .add("lt", "")
+            .add("execution", execution)
+            .build()
+        val response = execute(loginClient, request(loginUrl.toString()).post(form).build())
+        if (response.code !in listOf(301, 302, 303, 307, 308)) {
+            error(parseLoginError(response.text) ?: "登录失败，请检查账号密码或验证码要求（HTTP ${response.code}）")
         }
-    }
-
-    /**
-     * 生成随机 User-Agent
-     */
-    private fun randomUserAgent(): String {
-        val webkit = "${Random.nextInt(500, 541)}.${Random.nextInt(0, 81)}"
-        val chrome = "${Random.nextInt(90, 141)}.0.${Random.nextInt(0, 8001)}.${Random.nextInt(0, 201)}"
-        return "Mozilla/5.0 (Linux; Android 15; wv) AppleWebKit/$webkit (KHTML, like Gecko) Chrome/$chrome Mobile Safari/$webkit cpdaily/9.7.6 wisedu/9.7.6"
-    }
-
-    /**
-     * 生成指定长度的随机字符串
-     */
-    private fun randomString(length: Int): String {
-        return (1..length)
-            .map { AES_CHARS[Random.nextInt(AES_CHARS.length)] }
-            .joinToString("")
-    }
-
-    /**
-     * AES 加密密码
-     */
-    private fun encryptPassword(password: String, salt: String): String {
-        if (salt.isBlank()) return password
-
-        val randomPrefix = randomString(64)
-        val randomIv = randomString(16)
-        val data = randomPrefix + password
-
-        val key = salt.trim().toByteArray(Charsets.UTF_8)
-        val iv = randomIv.toByteArray(Charsets.UTF_8)
-
-        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-        val secretKey = SecretKeySpec(key, "AES")
-        val ivSpec = IvParameterSpec(iv)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec)
-
-        val encrypted = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
-        return Base64.encodeToString(encrypted, Base64.NO_WRAP)
-    }
-
-    /**
-     * 从登录页面 HTML 中提取表单参数
-     */
-    private fun getLoginParams(html: String): Map<String, String> {
-        val params = mutableMapOf<String, String>()
-
-        // 提取 pwdEncryptSalt
-        val saltPattern = Pattern.compile("""id="pwdEncryptSalt"\s+value="([^"]*)"""")
-        val saltMatcher = saltPattern.matcher(html)
-        if (saltMatcher.find()) {
-            params["salt"] = saltMatcher.group(1) ?: ""
+        var finalResponse = followRedirects(loginClient, response)
+        if (finalResponse.url.encodedPath == "/authserver/reAuthCheck/reAuthLoginView.do") {
+            finalResponse = authenticateDevice(loginClient, finalResponse, requestCode)
         }
-
-        // 提取 execution
-        val executionPattern = Pattern.compile("""name="execution"\s+value="([^"]*)"""")
-        val executionMatcher = executionPattern.matcher(html)
-        if (executionMatcher.find()) {
-            params["execution"] = executionMatcher.group(1) ?: ""
+        finalResponse.requireSuccess("登录跳转失败")
+        val jsessionId = cookies.getJSessionId(SERVICE_URL.toHttpUrl())
+            ?: error(parseLoginError(finalResponse.text) ?: "登录未完成，未获取到考勤会话")
+        check(validateSession(jsessionId, username).getOrThrow()) {
+            parseLoginError(finalResponse.text) ?: "登录未完成，账号校验失败"
         }
-
-        // 提取 _eventId - 默认 submit
-        params["_eventId"] = "submit"
-
-        // 从 pwdLoginDiv 中提取 cllt (用户名密码登录方式)
-        // 参考 Python: id="pwdLoginDiv"[\s\S]*?id="cllt"\s+name="cllt"\s+value="([^"]*)"
-        val clltPattern = Pattern.compile("""id="pwdLoginDiv"[\s\S]*?id="cllt"\s+name="cllt"\s+value="([^"]*)"""")
-        val clltMatcher = clltPattern.matcher(html)
-        if (clltMatcher.find()) {
-            params["cllt"] = clltMatcher.group(1) ?: "userNameLogin"
-            Log.d(TAG, "  - 从 pwdLoginDiv 提取 cllt: ${params["cllt"]}")
-        } else {
-            // 强制使用用户名密码登录
-            params["cllt"] = "userNameLogin"
-            Log.d(TAG, "  - 使用默认 cllt: userNameLogin")
-        }
-
-        // dllt - 通用登录
-        params["dllt"] = "generalLogin"
-
-        params["lt"] = ""
-
-        return params
+        jsessionId
     }
 
-    /**
-     * 登录并返回 JSESSIONID
-     */
-    suspend fun login(username: String, password: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val totalStart = System.currentTimeMillis()
-            
-            // 清除旧的 Cookie
-            sharedCookieJar.clear()
-            
-            // Step 1: 获取登录页面（连接已通过预热缓存）
-            var stepStart = System.currentTimeMillis()
-            Log.d(TAG, "[Step 1] 获取登录页面...")
-            
-            val loginPageUrl = "$LOGIN_BASE_URL?service=$SERVICE_URL"
-            val loginPageRequest = Request.Builder()
-                .url(loginPageUrl)
-                .header("Accept", "*/*")
-                .header("Connection", "keep-alive")
-                .header("User-Agent", randomUserAgent())
-                .get()
-                .build()
-
-            val loginPageResponse = client.newCall(loginPageRequest).execute()
-            Log.d(TAG, "  [耗时] Step 1: ${System.currentTimeMillis() - stepStart} ms")
-            
-            if (!loginPageResponse.isSuccessful) {
-                return@withContext Result.failure(Exception("获取登录页面失败: ${loginPageResponse.code}"))
-            }
-
-            val html = loginPageResponse.body?.string() ?: ""
-            val params = getLoginParams(html)
-
-            val salt = params["salt"]
-            val execution = params["execution"]
-
-            Log.d(TAG, "  - pwdEncryptSalt: $salt")
-            Log.d(TAG, "  - execution: ${execution?.take(50)}...")
-            Log.d(TAG, "  - cllt: ${params["cllt"]}")
-            Log.d(TAG, "  - dllt: ${params["dllt"]}")
-
-            if (salt.isNullOrBlank() || execution.isNullOrBlank()) {
-                return@withContext Result.failure(Exception("无法从页面中提取必要参数"))
-            }
-
-            // Step 2: 加密密码
-            stepStart = System.currentTimeMillis()
-            Log.d(TAG, "[Step 2] 加密密码...")
-            val encryptedPassword = encryptPassword(password, salt)
-            Log.d(TAG, "  [耗时] Step 2: ${System.currentTimeMillis() - stepStart} ms")
-            Log.d(TAG, "  - 加密后的密码: ${encryptedPassword.take(50)}...")
-
-            // Step 3: 提交登录请求
-            stepStart = System.currentTimeMillis()
-            Log.d(TAG, "[Step 3] 提交登录请求...")
-            val encodedServiceUrl = URLEncoder.encode(SERVICE_URL, "UTF-8")
-            val loginUrl = "$LOGIN_BASE_URL?service=$encodedServiceUrl"
-            
-            val cllt = params["cllt"] ?: "userNameLogin"
-            val dllt = params["dllt"] ?: "generalLogin"
-            Log.d(TAG, "  - 使用登录参数: cllt=$cllt, dllt=$dllt")
-
-            val formBody = FormBody.Builder()
-                .add("username", username)
-                .add("password", encryptedPassword)
-                .add("captcha", "")
-                .add("_eventId", params["_eventId"] ?: "submit")
-                .add("cllt", cllt)
-                .add("dllt", dllt)
-                .add("lt", params["lt"] ?: "")
-                .add("execution", execution)
-                .build()
-
-            // 模拟 Python requests.Session() 的默认 headers
-            val loginRequest = Request.Builder()
-                .url(loginUrl)
-                .header("Accept", "*/*")
-                .header("Connection", "keep-alive")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("User-Agent", randomUserAgent())
-                .post(formBody)
-                .build()
-
-            val loginResponse = client.newCall(loginRequest).execute()
-            Log.d(TAG, "  [耗时] Step 3: ${System.currentTimeMillis() - stepStart} ms")
-            Log.d(TAG, "  - 响应状态码: ${loginResponse.code}")
-
-            if (loginResponse.code == 302) {
-                val redirectUrl = loginResponse.header("Location")
-                Log.d(TAG, "  - 重定向地址: $redirectUrl")
-                
-                if (redirectUrl != null && redirectUrl.contains("ticket=")) {
-                    // Step 4: 手动跟踪重定向获取 JSESSIONID
-                    stepStart = System.currentTimeMillis()
-                    Log.d(TAG, "[Step 4] 获取 JSESSIONID...")
-                    
-                    var currentUrl: String = redirectUrl
-                    var jsessionId: String? = null
-                    var maxRedirects = 10
-                    
-                    while (maxRedirects > 0) {
-                        // 模拟 Python requests.Session() 的默认 headers
-                        val request = Request.Builder()
-                            .url(currentUrl)
-                            .header("Accept", "*/*")
-                            .header("Connection", "keep-alive")
-                            .header("User-Agent", randomUserAgent())
-                            .get()
-                            .build()
-                        
-                        val response = client.newCall(request).execute()
-                        Log.d(TAG, "  - 访问: $currentUrl -> ${response.code}")
-                        
-                        // 检查 Set-Cookie 头
-                        val cookies = response.headers("Set-Cookie")
-                        for (cookie in cookies) {
-                            Log.d(TAG, "  - Cookie: $cookie")
-                            if (cookie.startsWith("JSESSIONID=") && currentUrl.contains("attendance.nbu.edu.cn")) {
-                                jsessionId = cookie.substringAfter("JSESSIONID=").substringBefore(";")
-                                Log.d(TAG, "  - 找到 JSESSIONID: $jsessionId")
-                            }
-                        }
-                        
-                        if (response.code in 301..303 || response.code == 307 || response.code == 308) {
-                            val nextUrl = response.header("Location")
-                            if (nextUrl != null) {
-                                currentUrl = if (nextUrl.startsWith("http")) {
-                                    nextUrl
-                                } else {
-                                    // 相对路径转绝对路径
-                                    val baseUrl = currentUrl.substringBefore("?").substringBeforeLast("/")
-                                    "$baseUrl/$nextUrl"
-                                }
-                                maxRedirects--
-                                continue
-                            }
-                        }
-                        
-                        // 不是重定向，结束
-                        break
-                    }
-                    Log.d(TAG, "  [耗时] Step 4: ${System.currentTimeMillis() - stepStart} ms")
-                    
-                    // 如果还没找到，尝试从 CookieJar 获取
-                    if (jsessionId == null) {
-                        jsessionId = sharedCookieJar.getJSessionId("attendance.nbu.edu.cn")
-                        Log.d(TAG, "  - 从 CookieJar 获取 JSESSIONID: $jsessionId")
-                    }
-                    
-                    if (jsessionId != null) {
-                        Log.d(TAG, "[成功] JSESSIONID: $jsessionId")
-                        Log.d(TAG, "[总耗时] 登录完成: ${System.currentTimeMillis() - totalStart} ms")
-                        return@withContext Result.success(jsessionId)
-                    }
-                    
-                    // 打印所有 cookies 以便调试
-                    Log.d(TAG, "  - 所有 cookies: ${sharedCookieJar.getAllCookies()}")
-                    return@withContext Result.failure(Exception("未能从 cookies 中提取 JSESSIONID"))
-                } else {
-                    return@withContext Result.failure(Exception("重定向地址中未包含 ticket"))
-                }
-            } else if (loginResponse.code == 200 || loginResponse.code == 401) {
-                // 登录失败
-                val responseBody = loginResponse.body?.string() ?: ""
-                Log.d(TAG, "  - 响应内容: ${responseBody.take(500)}")
-                
-                val errorPatterns = listOf(
-                    """id="showErrorTip"[^>]*>([^<]+)</span>""",
-                    """class="auth_error"[^>]*>([^<]+)""",
-                    """<div[^>]*class="[^"]*error[^"]*"[^>]*>([^<]+)""",
-                    """<span[^>]*id="msg"[^>]*class="[^"]*"[^>]*>([^<]+)</span>"""
-                )
-                
-                for (pattern in errorPatterns) {
-                    val matcher = Pattern.compile(pattern).matcher(responseBody)
-                    if (matcher.find()) {
-                        val errorMsg = matcher.group(1)?.trim()
-                        if (!errorMsg.isNullOrBlank()) {
-                            return@withContext Result.failure(Exception("登录错误: $errorMsg"))
-                        }
-                    }
-                }
-                
-                return@withContext Result.failure(Exception("登录失败，请检查用户名密码或可能需要验证码"))
-            } else {
-                return@withContext Result.failure(Exception("未预期的响应状态码: ${loginResponse.code}"))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "登录异常: ${e.message}")
-            Log.e(TAG, "异常堆栈: ${e.stackTraceToString()}")
-            return@withContext Result.failure(Exception("登录异常: ${e.message}", e))
+    private suspend fun authenticateDevice(
+        loginClient: OkHttpClient,
+        page: HttpResponse,
+        requestCode: suspend (String) -> String?
+    ): HttpResponse {
+        page.requireSuccess("获取设备认证页面失败")
+        val userId = capture(page.text, """"reAuthUserId"\s*:\s*"([^"]*)"""")
+            ?: error("设备认证页面缺少用户信息")
+        val multifactor = capture(page.text, """"isMultifactor"\s*:\s*"([^"]*)"""")
+            ?: error("设备认证页面缺少认证参数")
+        val authType = capture(page.text, """"reAuthType"\s*:\s*"([^"]*)"""")
+            ?: error("设备认证页面缺少认证方式")
+        if (authType != "5") {
+            val response = authPost(loginClient, "reAuthCheck/changeReAuthType.do", mapOf(
+                "isMultifactor" to multifactor,
+                "reAuthType" to "5",
+                "service" to SERVICE_URL
+            ))
+            val data = gson.fromJson(response.text, ReAuthTypeResponse::class.java)
+            check(data?.code == 1) { data?.message ?: "选择风华宁大认证失败" }
         }
+        val sent = authPost(loginClient, "dynamicCode/getDynamicCodeByReauth.do", mapOf(
+            "userName" to userId,
+            "authCodeTypeName" to "reAuthCpdailyDynamicCodeType"
+        ))
+        val codeResponse = gson.fromJson(sent.text, DynamicCodeResponse::class.java)
+        check(codeResponse?.res in listOf("cpdaily_success", "other_success", "success", "code_time_fail")) {
+            codeResponse?.returnMessage ?: "发送风华宁大验证码失败"
+        }
+        val code = requestCode(codeResponse?.returnMessage ?: "请查看风华宁大收到的验证码")
+            ?: throw CancellationException("已取消登录")
+        val submitted = authPost(loginClient, "reAuthCheck/reAuthSubmit.do", mapOf(
+            "service" to SERVICE_URL,
+            "reAuthType" to "5",
+            "isMultifactor" to multifactor,
+            "dynamicCode" to code,
+            "skipTmpReAuth" to "true"
+        ))
+        val authResponse = gson.fromJson(submitted.text, ReAuthResponse::class.java)
+        check(!authResponse?.code.isNullOrBlank()) { "设备认证响应缺少结果" }
+        check(authResponse?.code !in listOf("reAuth_failed", "reAuth_unauthorized")) {
+            authResponse?.msg ?: "设备认证失败"
+        }
+        val url = LOGIN_URL.toHttpUrl().newBuilder().addQueryParameter("service", SERVICE_URL).build()
+        return followRedirects(loginClient, execute(loginClient, request(url.toString()).build()))
     }
 
-    /**
-     * 获取课程列表
-     */
-    suspend fun getCourses(jsessionId: String): Result<List<Course>> = withContext(Dispatchers.IO) {
-        try {
-            val startTime = System.currentTimeMillis()
-            Log.d(TAG, "[getCourses] 开始获取课程列表...")
-            
-            // 模拟浏览器环境的 headers，与 signtest.py 的 get_courses 保持一致
-            val request = Request.Builder()
-                .url(COURSE_URL)
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
-                .header("Cookie", "JSESSIONID=$jsessionId")
-                .header("Dnt", "1")
-                .header("User-Agent", randomUserAgent())
-                .get()
-                .build()
-
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
-            
-            Log.d(TAG, "[getCourses] 耗时: ${System.currentTimeMillis() - startTime} ms")
-            Log.d(TAG, "获取课程响应: ${responseBody.take(500)}")
-            
-            // 检查响应是否为空
-            if (responseBody.isBlank()) {
-                return@withContext Result.failure(Exception("服务器返回空响应"))
-            }
-            
-            // 检查是否是 HTML 响应（可能是登录页面重定向）
-            if (responseBody.trimStart().startsWith("<") || responseBody.contains("<!DOCTYPE")) {
-                Log.w(TAG, "响应为 HTML，可能需要重新登录")
-                return@withContext Result.failure(Exception("登录失效，请重新登录"))
-            }
-            
-            // 尝试解析 JSON
-            val courseResponse = try {
-                gson.fromJson(responseBody, CourseResponse::class.java)
-            } catch (jsonException: Exception) {
-                Log.e(TAG, "JSON 解析失败: ${jsonException.message}")
-                Log.e(TAG, "原始响应: $responseBody")
-                return@withContext Result.failure(Exception("解析课程数据失败，请稍后重试"))
-            }
-            
-            // 检查解析结果是否为 null
-            if (courseResponse == null) {
-                return@withContext Result.failure(Exception("解析课程数据失败"))
-            }
-            
-            if (courseResponse.code == 20000) {
-                val courses = courseResponse.data?.mapNotNull { 
-                    try {
-                        it.toCourse()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "转换课程数据失败: ${e.message}")
-                        null
-                    }
-                } ?: emptyList()
-                return@withContext Result.success(courses)
-            } else {
-                val errorMsg = courseResponse.msg ?: "获取课程失败"
-                // 检查是否需要重新登录
-                if (errorMsg.contains("登录") || errorMsg.contains("未授权") || courseResponse.code == 401) {
-                    return@withContext Result.failure(Exception("登录失效，请重新登录"))
-                }
-                return@withContext Result.failure(Exception(errorMsg))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "获取课程异常: ${e.message}")
-            Log.e(TAG, "异常堆栈: ${e.stackTraceToString()}")
-            // 显示原始错误信息，便于调试
-            val errorMessage = e.message ?: "未知错误"
-            return@withContext Result.failure(Exception("获取课程失败: $errorMessage"))
-        }
+    private suspend fun authPost(
+        loginClient: OkHttpClient,
+        path: String,
+        params: Map<String, String>
+    ): HttpResponse {
+        val form = FormBody.Builder()
+        params.forEach { (name, value) -> form.add(name, value) }
+        val response = execute(loginClient, request(AUTH_URL + path)
+            .header("X-Requested-With", "XMLHttpRequest")
+            .post(form.build())
+            .build())
+        response.requireSuccess("设备认证请求失败")
+        return response
     }
 
-    /**
-     * 签到
-     */
+    private suspend fun followRedirects(loginClient: OkHttpClient, initial: HttpResponse): HttpResponse {
+        var response = initial
+        repeat(10) {
+            if (response.code !in listOf(301, 302, 303, 307, 308)) return response
+            val location = response.location ?: error("登录跳转缺少 Location")
+            val url = response.url.resolve(location) ?: error("无法解析登录跳转地址")
+            response = execute(loginClient, request(url.toString()).build())
+        }
+        check(response.code !in listOf(301, 302, 303, 307, 308)) { "登录跳转次数过多" }
+        return response
+    }
+
+    suspend fun validateSession(jsessionId: String, username: String): Result<Boolean> = result {
+        val response = execute(client, request(USER_INFO_URL, jsessionId).build())
+        if (response.code !in 200..299) return@result false
+        val info = try {
+            gson.fromJson(response.text, UserInfoResponse::class.java)
+        } catch (_: JsonSyntaxException) {
+            return@result false
+        }
+        info?.code == 20000 && info.success == true && info.data?.student?.xh == username
+    }
+
+    suspend fun getCourses(jsessionId: String): Result<List<Course>> = result {
+        val response = execute(client, request(COURSE_URL, jsessionId).header("Dnt", "1").build())
+        response.requireSession()
+        response.requireSuccess("获取课程失败")
+        val data = gson.fromJson(response.text, CourseResponse::class.java) ?: error("课程响应为空")
+        if (data.code == 401 || data.msg?.contains("登录") == true || data.msg?.contains("未授权") == true) {
+            throw SessionExpiredException()
+        }
+        check(data.code == 20000) { data.msg ?: "获取课程失败" }
+        data.data.orEmpty().map { it.toCourse() }
+    }
+
     suspend fun sign(
         jsessionId: String,
         coursePlanId: String,
         attendanceId: String,
         courseCode: Int
-    ): Result<SignResult> = withContext(Dispatchers.IO) {
+    ): Result<SignResult> = result {
+        require(courseCode in 0..9999) { "请输入4位数字签到码" }
+        val url = SIGN_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("timeNow", System.currentTimeMillis().toString())
+            .addQueryParameter("courseCode", courseCode.toString().padStart(4, '0'))
+            .addQueryParameter("coursePlanId", coursePlanId)
+            .addQueryParameter("attendanceId", attendanceId)
+            .addQueryParameter("lng", "0")
+            .addQueryParameter("lat", "0")
+            .build()
+        val response = execute(client, request(url.toString(), jsessionId)
+            .header("Content-Type", "application/json;charset=UTF-8")
+            .header("Referer", "https://attendance.nbu.edu.cn/h5/student/sign/")
+            .header("Dnt", "1")
+            .header("Sec-Fetch-Dest", "empty")
+            .header("Sec-Fetch-Mode", "cors")
+            .header("Sec-Fetch-Site", "same-origin")
+            .header("X-Requested-With", "com.wisedu.cpdaily.nbu")
+            .build())
+        response.requireSession()
+        response.requireSuccess("签到请求失败")
+        val data = gson.fromJson(response.text, SignResponse::class.java) ?: error("签到响应为空")
+        if (data.code == 401 || data.msg?.contains("登录") == true) throw SessionExpiredException()
+        val success = (data.code == 20000 || data.success == true) &&
+            !data.msg.orEmpty().contains("错误") && !data.msg.orEmpty().contains("未设置")
+        SignResult(success, courseCode, data.msg ?: response.text)
+    }
+
+    private fun request(url: String, jsessionId: String? = null): Request.Builder {
+        val builder = Request.Builder().url(url)
+            .header("User-Agent", userAgent)
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
+        if (jsessionId != null) builder.header("Cookie", "JSESSIONID=$jsessionId")
+        return builder
+    }
+
+    /**
+     * 取消协程时同时取消网络请求，响应体在回调中读取并关闭。
+     */
+    private suspend fun execute(httpClient: OkHttpClient, request: Request): HttpResponse =
+        suspendCancellableCoroutine { continuation ->
+            val call = httpClient.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    continuation.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val data = try {
+                        response.use {
+                            HttpResponse(it.code, it.request.url, it.header("Location"), it.body?.string().orEmpty())
+                        }
+                    } catch (e: Exception) {
+                        continuation.resumeWithException(e)
+                        return
+                    }
+                    continuation.resume(data)
+                }
+            })
+        }
+
+    private suspend fun <T> result(block: suspend () -> T): Result<T> = withContext(Dispatchers.IO) {
         try {
-            val timeNow = System.currentTimeMillis().toString()
-            val codeStr = String.format("%04d", courseCode)
-            
-            Log.d(TAG, "签到参数: coursePlanId=$coursePlanId, attendanceId=$attendanceId, courseCode=$codeStr, timeNow=$timeNow")
-            
-            // 使用 HttpUrl.Builder 正确构建 URL，自动处理参数编码
-            val url = okhttp3.HttpUrl.Builder()
-                .scheme("https")
-                .host("attendance.nbu.edu.cn")
-                .addPathSegments("api/coursePlan/signByCourseCode")
-                .addQueryParameter("timeNow", timeNow)
-                .addQueryParameter("courseCode", codeStr)
-                .addQueryParameter("coursePlanId", coursePlanId)
-                .addQueryParameter("attendanceId", attendanceId)
-                .addQueryParameter("lng", "0")
-                .addQueryParameter("lat", "0")
-                .build()
-            
-            Log.d(TAG, "签到请求URL: $url")
-
-            // 模拟浏览器环境的完整 headers，与 signtest.py 保持一致
-            // 注意：不设置 Accept-Encoding，OkHttp 会自动处理压缩
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
-                .header("Connection", "keep-alive")
-                .header("Content-Type", "application/json;charset=UTF-8")
-                .header("Cookie", "JSESSIONID=$jsessionId")
-                .header("Dnt", "1")
-                .header("Host", "attendance.nbu.edu.cn")
-                .header("Referer", "https://attendance.nbu.edu.cn/h5/student/sign/")
-                .header("Sec-Fetch-Dest", "empty")
-                .header("Sec-Fetch-Mode", "cors")
-                .header("Sec-Fetch-Site", "same-origin")
-                .header("User-Agent", randomUserAgent())
-                .header("X-Requested-With", "com.wisedu.cpdaily.nbu")
-                .get()
-                .build()
-
-            // 使用 signClient 而不是 client，避免 CookieJar 覆盖手动设置的 Cookie
-            val response = signClient.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
-            
-            Log.d(TAG, "签到响应: $responseBody, HTTP状态: ${response.code}, 使用JSESSIONID: ${jsessionId.take(10)}...")
-
-            // 尝试解析 JSON 获取原始错误消息
-            val jsonResponse = try {
-                gson.fromJson(responseBody, SignResponse::class.java)
-            } catch (e: Exception) {
-                null
-            }
-            
-            // 判断是否成功：code == 20000 或响应不包含错误关键字
-            val isSuccess = jsonResponse?.code == 20000 || 
-                (!responseBody.contains("错误") && !responseBody.contains("未设置") && jsonResponse?.success == true)
-            
-            // 使用服务器返回的原始消息
-            val message = jsonResponse?.msg ?: responseBody
-            
-            val signResult = SignResult(isSuccess, courseCode, message)
-
-            return@withContext Result.success(signResult)
+            Result.success(block())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            return@withContext Result.failure(e)
+            Result.failure(e)
         }
     }
+
+    private fun capture(html: String, pattern: String): String? =
+        Regex(pattern).find(html)?.groupValues?.get(1)
+
+    private fun parseLoginError(html: String): String? = listOf(
+        """id="showErrorTip"[^>]*>([^<]+)</span>""",
+        """class="auth_error"[^>]*>([^<]+)""",
+        """<div[^>]*class="[^"]*error[^"]*"[^>]*>([^<]+)"""
+    ).firstNotNullOfOrNull { capture(html, it)?.trim()?.takeIf(String::isNotEmpty) }
+
+    private fun encryptPassword(password: String, salt: String): String {
+        if (salt.isEmpty()) return password
+        val prefix = randomString(64)
+        val iv = IvParameterSpec(randomString(16).toByteArray(Charsets.UTF_8))
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(salt.trim().toByteArray(Charsets.UTF_8), "AES"), iv)
+        return Base64.getEncoder().encodeToString(cipher.doFinal((prefix + password).toByteArray(Charsets.UTF_8)))
+    }
+
+    private fun randomString(length: Int): String =
+        (1..length).map { AES_CHARS[Random.nextInt(AES_CHARS.length)] }.joinToString("")
+
+    private data class HttpResponse(val code: Int, val url: HttpUrl, val location: String?, val text: String) {
+        fun requireSuccess(message: String) {
+            check(code in 200..299) { "$message（HTTP $code）" }
+        }
+
+        fun requireSession() {
+            if (code == 401 || code in listOf(301, 302, 303, 307, 308) ||
+                (code in 200..299 && text.trimStart().startsWith("<"))) {
+                throw SessionExpiredException()
+            }
+        }
+    }
+
+    private data class ReAuthTypeResponse(val code: Int?, val message: String?)
+    private data class DynamicCodeResponse(val res: String?, val returnMessage: String?)
+    private data class ReAuthResponse(val code: String?, val msg: String?)
+    private data class UserInfoResponse(val code: Int?, val success: Boolean?, val data: UserInfoData?)
+    private data class UserInfoData(val student: Student?)
+    private data class Student(val xh: String?)
+    private data class SignResponse(val code: Int?, val msg: String?, val success: Boolean?)
 }
 
-/**
- * 签到响应数据结构
- */
-data class SignResponse(
-    val code: Int?,
-    val msg: String?,
-    val success: Boolean?
-)
+class SessionExpiredException : IOException("登录状态已失效，请重新登录")
