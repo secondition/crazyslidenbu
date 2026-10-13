@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">疯滑宁大 Pro</string>
     <string name="verification_code">验证码</string>
-    <string name="disclaimer">本软件仅供快捷签到与学习使用。使用者自行承担其行为责任，与开发者无关。</string>
+    <string name="title_prefix">疯滑</string>
+    <string name="title_nbu">宁大</string>
+    <string name="disclaimer">仅供快捷签到与学习，使用责任自负。</string>
 </resources>

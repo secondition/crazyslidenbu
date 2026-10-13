@@ -4,11 +4,15 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:background="@color/bg_light">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <!-- 顶部 Header 背景 -->
         <View
@@ -19,23 +23,34 @@
             app:layout_constraintTop_toTopOf="parent" />
 
         <!-- 标题区域 -->
-        <com.example.nbu.view.LoginTitle
-            android:id="@+id/tvTitle"
+        <LinearLayout
+            android:id="@+id/titleGroup"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="疯滑宁大"
-            android:textSize="48sp"
-            android:textStyle="italic"
-            android:fontFamily="sans-serif-black"
-            android:textColor="@android:color/white"
-            android:shadowColor="#40000000"
-            android:shadowDx="4"
-            android:shadowDy="4"
-            android:shadowRadius="8"
+            android:orientation="horizontal"
+            android:elevation="16dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:layout_marginTop="64dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:id="@+id/tvTitlePrefix"
+                style="@style/LoginTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/title_prefix" />
+
+            <com.example.nbu.view.LoginTitle
+                android:id="@+id/tvTitle"
+                style="@style/LoginTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/title_nbu" />
+
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tvSubtitle"
@@ -49,7 +64,7 @@
             android:layout_marginTop="8dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/tvTitle" />
+            app:layout_constraintTop_toBottomOf="@+id/titleGroup" />
 
         <!-- 登录卡片 -->
         <com.google.android.material.card.MaterialCardView

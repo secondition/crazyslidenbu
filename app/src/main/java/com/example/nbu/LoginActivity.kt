@@ -214,7 +214,8 @@ class LoginActivity : AppCompatActivity() {
         dialogBinding.btnClose.setOnClickListener {
             dialog.dismiss()
         }
-        
+        dialog.setOnDismissListener { binding.tvTitle.reset() }
+
         dialog.show()
     }
 
