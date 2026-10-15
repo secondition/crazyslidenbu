@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.nbu.adapter.CourseAdapter
 import com.example.nbu.databinding.ActivitySignBinding
 import com.example.nbu.model.Course
+import com.example.nbu.network.NbuApiService
 import com.example.nbu.network.SessionExpiredException
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
@@ -28,8 +29,7 @@ class SignActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivitySignBinding
-    // 使用全局共享的 ApiService
-    private val apiService by lazy { NbuApplication.apiService }
+    private val apiService by lazy { NbuApiService(userManager.getBrowserProfile(username)) }
     private lateinit var adapter: CourseAdapter
     private lateinit var userManager: UserManager
     

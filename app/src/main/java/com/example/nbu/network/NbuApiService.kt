@@ -1,6 +1,7 @@
 package com.example.nbu.network
 
 import android.util.Log
+import com.example.nbu.model.BrowserProfile
 import com.example.nbu.model.Course
 import com.example.nbu.model.CourseResponse
 import com.example.nbu.model.SignResult
@@ -31,7 +32,7 @@ import kotlin.random.Random
 /**
  * NBU 统一身份认证与考勤服务
  */
-class NbuApiService {
+class NbuApiService(private val browser: BrowserProfile) {
 
     companion object {
         private const val TAG = "NbuApiService"
@@ -42,25 +43,26 @@ class NbuApiService {
         private const val USER_INFO_URL = "https://attendance.nbu.edu.cn/api/user/get/user/info"
         private const val COURSE_URL = "https://attendance.nbu.edu.cn/api/curriculum/student/getCourse"
         private const val SIGN_URL = "https://attendance.nbu.edu.cn/api/coursePlan/signByCourseCode"
+        private val client = OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+
+        suspend fun preloadLoginPage() {
+            withContext(Dispatchers.IO) {
+                try {
+                    client.newCall(Request.Builder().url(LOGIN_URL).head().build()).execute().use { }
+                } catch (e: IOException) {
+                    Log.d(TAG, "预热连接失败", e)
+                }
+            }
+        }
     }
 
     private val gson = Gson()
-    private val userAgent = "Mozilla/5.0 (Linux; Android 17; wv) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Version/4.0 Chrome/155.0.${Random.nextInt(8000)}.${Random.nextInt(200)} " +
-        "Mobile Safari/537.36 cpdaily/9.9.10 wisedu/9.9.10"
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(15, TimeUnit.SECONDS)
-        .followRedirects(false)
-        .followSslRedirects(false)
-        .build()
-
-    suspend fun preloadLoginPage() {
-        result {
-            execute(client, request(LOGIN_URL).head().build())
-        }.onFailure { Log.d(TAG, "预热连接失败", it) }
-    }
 
     /**
      * 每次认证使用独立 CookieJar，避免多个账号共享认证状态。
@@ -68,7 +70,6 @@ class NbuApiService {
     suspend fun login(
         username: String,
         password: String,
-        fingerprint: String,
         requestCode: suspend (String) -> String?
     ): Result<String> = result {
         val cookies = SimpleCookieJar()
@@ -89,7 +90,7 @@ class NbuApiService {
         val dllt = capture(page.text, """id="dllt"\s+name="dllt"\s+value="([^"]*)"""")
             ?: "generalLogin"
         val fingerprintUrl = "${AUTH_URL}bfp/info".toHttpUrl().newBuilder()
-            .addQueryParameter("bfp", fingerprint)
+            .addQueryParameter("bfp", browser.fingerprint)
             .build()
         execute(
             loginClient,
@@ -255,7 +256,7 @@ class NbuApiService {
 
     private fun request(url: String, jsessionId: String? = null): Request.Builder {
         val builder = Request.Builder().url(url)
-            .header("User-Agent", userAgent)
+            .header("User-Agent", browser.userAgent)
             .header("Accept", "application/json, text/plain, */*")
             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
         if (jsessionId != null) builder.header("Cookie", "JSESSIONID=$jsessionId")

@@ -18,6 +18,7 @@ import com.example.nbu.databinding.DialogAddUserBinding
 import com.example.nbu.databinding.DialogUserManagementBinding
 import com.example.nbu.databinding.DialogVerificationBinding
 import com.example.nbu.model.User
+import com.example.nbu.network.NbuApiService
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
 import kotlinx.coroutines.CancellationException
@@ -33,8 +34,6 @@ import kotlin.coroutines.resume
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
-    // 使用全局共享的 ApiService（已预加载登录页面）
-    private val apiService by lazy { NbuApplication.apiService }
     private lateinit var userManager: UserManager
     
     // 用于启动 SignActivity
@@ -242,13 +241,14 @@ class LoginActivity : AppCompatActivity() {
         setLoadingState(true, "正在登录...")
         lifecycleScope.launch {
             try {
+                val apiService = NbuApiService(userManager.getBrowserProfile(username))
                 var session = userManager.getCachedSession(username)
                 if (session != null && !apiService.validateSession(session, username).getOrThrow()) {
                     userManager.clearSession(username)
                     session = null
                 }
                 if (session == null) {
-                    session = apiService.login(username, password, userManager.getFingerprint(), ::requestVerificationCode)
+                    session = apiService.login(username, password, ::requestVerificationCode)
                         .getOrThrow()
                     userManager.saveSession(username, session)
                 }

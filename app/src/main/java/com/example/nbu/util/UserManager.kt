@@ -3,10 +3,12 @@ package com.example.nbu.util
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.example.nbu.model.BrowserProfile
 import com.example.nbu.model.User
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
+import kotlin.random.Random
 
 /**
  * 用户管理器 - 用于管理多用户账号信息和 JSESSIONID 缓存
@@ -24,7 +26,7 @@ class UserManager(context: Context) {
         private const val KEY_LAST_USERNAME = "last_username"
         private const val KEY_LAST_PASSWORD = "last_password"
         
-        private const val KEY_FINGERPRINT = "fingerprint"
+        private const val KEY_PREFIX_BROWSER = "browser_"
         private const val SESSION_EXPIRE_TIME = 24 * 60 * 60 * 1000L
     }
     
@@ -86,11 +88,17 @@ class UserManager(context: Context) {
         prefs.edit { putString(KEY_USERS, json) }
     }
     
-    fun getFingerprint(): String {
-        prefs.getString(KEY_FINGERPRINT, null)?.let { return it }
-        val fingerprint = UUID.randomUUID().toString().replace("-", "").uppercase()
-        prefs.edit { putString(KEY_FINGERPRINT, fingerprint) }
-        return fingerprint
+    fun getBrowserProfile(username: String): BrowserProfile {
+        val key = KEY_PREFIX_BROWSER + username
+        prefs.getString(key, null)?.let { return gson.fromJson(it, BrowserProfile::class.java) }
+        val profile = BrowserProfile(
+            userAgent = "Mozilla/5.0 (Linux; Android 17; wv) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Version/4.0 Chrome/155.0.${Random.nextInt(8000)}.${Random.nextInt(200)} " +
+                "Mobile Safari/537.36 cpdaily/9.9.10 wisedu/9.9.10",
+            fingerprint = UUID.randomUUID().toString().replace("-", "").uppercase()
+        )
+        prefs.edit { putString(key, gson.toJson(profile)) }
+        return profile
     }
 
     // ==================== Session 缓存管理 ====================

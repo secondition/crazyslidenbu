@@ -16,10 +16,6 @@ class NbuApplication : Application() {
 
     companion object {
         private const val TAG = "NbuApplication"
-        
-        // 全局共享的 ApiService 实例
-        lateinit var apiService: NbuApiService
-            private set
     }
 
     // Application 级别的协程作用域
@@ -28,13 +24,10 @@ class NbuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         
-        // 初始化全局 ApiService
-        apiService = NbuApiService()
-        
         // 启动时预热网络连接（DNS + TLS）
         Log.d(TAG, "App 启动，开始预热网络连接...")
         applicationScope.launch(Dispatchers.IO) {
-            apiService.preloadLoginPage()
+            NbuApiService.preloadLoginPage()
         }
     }
 }
