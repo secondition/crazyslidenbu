@@ -3,6 +3,7 @@ package com.example.nbu.network
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import com.example.nbu.model.ActivityCode
 import com.example.nbu.model.Course
 import com.example.nbu.model.CourseResponse
 import com.example.nbu.model.PlatformSession
@@ -10,6 +11,7 @@ import com.example.nbu.model.SignResult
 import com.example.nbu.util.UserManager
 import com.google.gson.Gson
 import com.google.gson.JsonElement
+import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSyntaxException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +49,8 @@ class NbuApiService(private val username: String, private val userManager: UserM
         private const val AUTH_URL = "https://uis.nbu.edu.cn/authserver/"
         private const val LOGIN_URL = "${AUTH_URL}login"
         private const val PLATFORM_URL = "https://mobile.campushoy.com/"
+        private const val ACTIVITY_ENTRY = "${ActivityCode.BASE_URL}/mobile/entry-scan/index.html"
+        private const val ACTIVITY_PAGE = "${ActivityCode.BASE_URL}/mobile/new-entry-scan/index.html"
         private const val SERVICE_URL = "https://attendance.nbu.edu.cn/api/getIndex"
         private const val USER_INFO_URL = "https://attendance.nbu.edu.cn/api/user/get/user/info"
         private const val COURSE_URL = "https://attendance.nbu.edu.cn/api/curriculum/student/getCourse"
@@ -312,7 +316,9 @@ class NbuApiService(private val username: String, private val userManager: UserM
         var response = initial
         repeat(10) {
             if (!response.isRedirect) return response
-            response = execute(accountClient, request(response.redirectUrl().toString()).build())
+            val target = response.redirectUrl()
+            if (target.encodedPath.startsWith("/iap/")) throw SessionExpiredException()
+            response = execute(accountClient, request(target.toString()).build())
         }
         check(!response.isRedirect) { "登录跳转次数过多" }
         return response
@@ -372,6 +378,36 @@ class NbuApiService(private val username: String, private val userManager: UserM
         val success = (data.code == 20000 || data.success == true) &&
             !data.msg.orEmpty().contains("错误") && !data.msg.orEmpty().contains("未设置")
         SignResult(success, courseCode, data.msg ?: response.text)
+    }
+
+    suspend fun signActivity(code: ActivityCode): Result<String> = result {
+        if (platform == null) throw SessionExpiredException()
+        val entry = ACTIVITY_ENTRY.toHttpUrl()
+        val page = followRedirects(execute(accountClient, request(ACTIVITY_ENTRY).build()))
+        page.requireSuccess("活动授权失败")
+        if (page.url.host != entry.host || page.url.encodedPath != entry.encodedPath ||
+            cookies.loadForRequest(entry).none { it.name == "MOD_AUTH_CAS" }) {
+            throw SessionExpiredException()
+        }
+        val (path, payload) = when (code.toolCode) {
+            "1" -> {
+                val action = if (code.isSignin) "signInWithScan" else "signOutWithScan"
+                "/mobile/signTool/$action" to mapOf("wid" to code.taskWid, "qrUuid" to code.uuid, "uaIsCpadaily" to true)
+            }
+            "9" -> "/mobile/clockinTool/clockinWithQr" to mapOf("isSignin" to code.isSignin, "qrCode" to code.uuid, "periodWid" to code.wid)
+            else -> error("此二维码不属于活动签到或打卡")
+        }
+        val body = gson.toJson(payload).toRequestBody("application/json; charset=utf-8".toMediaType())
+        val response = execute(accountClient, request(ActivityCode.BASE_URL + path)
+            .header("Origin", "${entry.scheme}://${entry.host}")
+            .header("Referer", ACTIVITY_PAGE)
+            .post(body).build())
+        response.requireSession()
+        response.requireSuccess("活动签到请求失败")
+        val data = gson.fromJson(response.text, ActivityResponse::class.java) ?: error("活动响应为空")
+        if (data.code == JsonPrimitive("350F9D68221A0DB19024EE40CFC3C7F8")) throw SessionExpiredException()
+        check(data.code == JsonPrimitive("0")) { data.message ?: "活动签到失败" }
+        if (code.isSignin) "已签到" else "已签退"
     }
 
     private fun request(url: String, jsessionId: String? = null): Request.Builder {
@@ -487,6 +523,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
     private data class UserInfoData(val student: Student?)
     private data class Student(val xh: String?)
     private data class SignResponse(val code: Int?, val msg: String?, val success: Boolean?)
+    private data class ActivityResponse(val code: JsonElement?, val message: String?)
 }
 
 class SessionExpiredException : IOException("登录状态已失效，请重新登录")

@@ -63,6 +63,9 @@ dependencies {
     // SwipeRefreshLayout for pull-to-refresh
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     
+    // Barcode scanning
+    implementation(libs.zxing)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

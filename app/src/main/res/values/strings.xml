@@ -6,4 +6,20 @@
     <string name="disclaimer">仅供快捷签到与学习，使用责任自负。</string>
     <string name="import_device">导入设备标识</string>
     <string name="device_imported">设备标识已导入</string>
+    <string name="sign_title">签到</string>
+    <string name="course_tab">课程</string>
+    <string name="activity_tab">活动</string>
+    <string name="activity_title">活动签到</string>
+    <string name="activity_hint">扫描活动二维码，自动完成签到或签退。</string>
+    <string name="scan">扫一扫</string>
+    <string name="scan_again">再次扫描</string>
+    <string name="scan_prompt">将活动二维码放入框内</string>
+    <string name="activity_submitting">正在提交</string>
+    <string name="activity_failed">操作未完成</string>
+    <string name="torch_on">打开补光</string>
+    <string name="torch_off">关闭补光</string>
+    <string name="camera_permission">需要相机权限才能扫码</string>
+    <string name="zxing_app_name">扫一扫</string>
+    <string name="zxing_button_ok">确定</string>
+    <string name="zxing_msg_camera_framework_bug">无法打开相机</string>
 </resources>

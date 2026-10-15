@@ -1,8 +1,10 @@
 package com.example.nbu
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -10,22 +12,30 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.nbu.adapter.CourseAdapter
 import com.example.nbu.databinding.ActivitySignBinding
+import com.example.nbu.model.ActivityCode
 import com.example.nbu.model.Course
 import com.example.nbu.network.NbuApiService
 import com.example.nbu.network.SessionExpiredException
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
+import com.google.android.material.tabs.TabLayout
+import com.google.zxing.client.android.Intents
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
  * 签到界面
- * 对接 signtest.py 的签到逻辑
  */
 class SignActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_JSESSION_ID = "jsession_id"
         const val EXTRA_USERNAME = "username"
+        private const val KEY_TAB = "tab"
+        private const val KEY_ACTIVITY_MESSAGE = "activity_message"
+        private const val KEY_ACTIVITY_SUCCESS = "activity_success"
     }
 
     private lateinit var binding: ActivitySignBinding
@@ -35,6 +45,22 @@ class SignActivity : AppCompatActivity() {
     
     private var jsessionId: String = ""
     private var username: String = ""
+    private var courseJob: Job? = null
+    private var coursesLoaded = false
+    private var activityResult: Pair<Boolean, String>? = null
+
+    private val scanner = registerForActivityResult(ScanContract()) { result ->
+        binding.btnScan.isEnabled = true
+        val value = result.contents ?: return@registerForActivityResult
+        binding.tabs.getTabAt(1)?.select()
+        val code = try {
+            ActivityCode.parse(value)
+        } catch (e: IllegalArgumentException) {
+            showActivityResult(false, e.message ?: getString(R.string.activity_failed))
+            return@registerForActivityResult
+        }
+        performActivitySign(code)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,16 +75,29 @@ class SignActivity : AppCompatActivity() {
         jsessionId = intent.getStringExtra(EXTRA_JSESSION_ID) ?: ""
         username = intent.getStringExtra(EXTRA_USERNAME) ?: ""
         
-        if (jsessionId.isEmpty()) {
+        if (jsessionId.isEmpty() || username.isEmpty()) {
             Toast.makeText(this, "Session 无效，请重新登录", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
         setupViews()
-        loadCourses()
+        binding.tabs.getTabAt(savedInstanceState?.getInt(KEY_TAB) ?: 0)?.select()
+        savedInstanceState?.getString(KEY_ACTIVITY_MESSAGE)?.let {
+            showActivityResult(savedInstanceState.getBoolean(KEY_ACTIVITY_SUCCESS), it)
+        }
+        if (binding.tabs.selectedTabPosition == 0) loadCourses()
     }
-    
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(KEY_TAB, binding.tabs.selectedTabPosition)
+        activityResult?.let { (success, message) ->
+            outState.putBoolean(KEY_ACTIVITY_SUCCESS, success)
+            outState.putString(KEY_ACTIVITY_MESSAGE, message)
+        }
+    }
+
     private fun navigateToLogin() {
         val intent = Intent(this, LoginActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -85,15 +124,39 @@ class SignActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
+
+        binding.tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(binding.root.windowToken, 0)
+                val course = tab.position == 0
+                binding.coursePage.visibility = if (course) View.VISIBLE else View.GONE
+                binding.activityPage.visibility = if (course) View.GONE else View.VISIBLE
+                if (course && !coursesLoaded && courseJob?.isActive != true) loadCourses()
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
+        binding.btnScan.setOnClickListener {
+            binding.btnScan.isEnabled = false
+            scanner.launch(ScanOptions()
+                .setCaptureActivity(ScanActivity::class.java)
+                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt(getString(R.string.scan_prompt))
+                .addExtra(Intents.Scan.SHOW_MISSING_CAMERA_PERMISSION_DIALOG, true)
+                .addExtra(Intents.Scan.MISSING_CAMERA_PERMISSION_DIALOG_MESSAGE, getString(R.string.camera_permission)))
+        }
     }
 
     private fun loadCourses() {
+        courseJob?.cancel()
         setLoadingState(true, "正在获取课程列表...")
 
-        lifecycleScope.launch {
+        courseJob = lifecycleScope.launch {
             val result = apiService.getCourses(jsessionId)
 
             result.onSuccess { courses ->
+                coursesLoaded = true
                 setLoadingState(false)
                 
                 if (courses.isEmpty()) {
@@ -173,6 +236,36 @@ class SignActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun performActivitySign(code: ActivityCode) {
+        activityResult = null
+        binding.btnScan.isEnabled = false
+        binding.ivActivityStatus.visibility = View.GONE
+        binding.activityProgress.visibility = View.VISIBLE
+        binding.tvActivityTitle.setText(R.string.activity_submitting)
+        binding.tvActivityMessage.visibility = View.GONE
+        lifecycleScope.launch {
+            apiService.signActivity(code).onSuccess {
+                showActivityResult(true, it)
+            }.onFailure {
+                if (it is SessionExpiredException) handleSessionExpired()
+                else showActivityResult(false, it.message ?: getString(R.string.activity_failed))
+            }
+        }
+    }
+
+    private fun showActivityResult(success: Boolean, message: String) {
+        activityResult = success to message
+        binding.activityProgress.visibility = View.GONE
+        binding.ivActivityStatus.visibility = View.VISIBLE
+        binding.ivActivityStatus.setImageResource(if (success) R.drawable.ic_status_check else R.drawable.ic_status_close)
+        binding.ivActivityStatus.imageTintList = ColorStateList.valueOf(getColor(if (success) R.color.status_success else R.color.status_error))
+        binding.tvActivityTitle.text = if (success) message else getString(R.string.activity_failed)
+        binding.tvActivityMessage.text = message
+        binding.tvActivityMessage.visibility = if (success) View.GONE else View.VISIBLE
+        binding.btnScan.setText(R.string.scan_again)
+        binding.btnScan.isEnabled = true
     }
 
     private fun setLoadingState(isLoading: Boolean, message: String = "") {
