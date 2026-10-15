@@ -1,6 +1,8 @@
 package com.example.nbu.util
 
 import android.content.Context
+import android.content.ContentUris
+import android.provider.MediaStore
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.example.nbu.model.BrowserProfile
@@ -10,6 +12,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import java.io.DataInputStream
 import java.util.UUID
 import kotlin.random.Random
 
@@ -20,6 +23,7 @@ class UserManager(context: Context) {
     
     private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
+    private val resolver = context.applicationContext.contentResolver
     
     companion object {
         private const val PREF_NAME = "nbu_users"
@@ -109,20 +113,35 @@ class UserManager(context: Context) {
         return profile
     }
 
-    fun getDeviceId(): String? = prefs.getString(KEY_DEVICE_ID, null)
+    fun getLocalDeviceId(): String? = prefs.getString(KEY_DEVICE_ID, null)
 
-    fun saveDeviceId(deviceId: String) {
-        require(deviceId.length == 36) { "设备标识无效" }
+    fun getDeviceId(username: String): String? = getUser(username)?.deviceId ?: getLocalDeviceId()
+
+    fun readDeviceId(): String? {
+        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val uri = resolver.query(collection, arrayOf(MediaStore.Images.Media._ID),
+            "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?", arrayOf("%cpdaily_external_did%"),
+            "${MediaStore.Images.Media.DATE_MODIFIED} DESC")?.use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            ContentUris.withAppendedId(collection, cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)))
+        } ?: error("无法读取系统媒体库")
+        val input = resolver.openInputStream(uri) ?: error("无法读取共享设备标识")
+        val deviceId = DataInputStream(input).use {
+            val bytes = ByteArray(36)
+            it.readFully(bytes)
+            check(it.read() == -1) { "共享设备标识格式无效" }
+            bytes.toString(Charsets.UTF_8)
+        }
         UUID.fromString(deviceId)
-        val sessions = if (getDeviceId() != deviceId) {
-            prefs.all.keys.filter { it.startsWith(KEY_PREFIX_PLATFORM) }
-        } else {
-            emptyList()
-        }
-        prefs.edit {
-            sessions.forEach { remove(it) }
-            putString(KEY_DEVICE_ID, deviceId)
-        }
+        prefs.edit { putString(KEY_DEVICE_ID, deviceId) }
+        return deviceId
+    }
+
+    fun clearAuthentication(username: String) {
+        clearSession(username)
+        clearPlatformSession(username)
+        val names = setOf("sessionToken", "CASTGC", "AUTHTGC", "JSESSIONID", "MOD_AUTH_CAS")
+        saveCookies(username, getCookies(username).filterNot { it.name in names })
     }
 
     fun getPlatformSession(username: String): PlatformSession? {

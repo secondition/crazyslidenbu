@@ -6,7 +6,9 @@ package com.example.nbu.model
 data class User(
     val username: String,      // 学号
     val password: String,      // 密码
-    val remark: String = ""    // 备注（用于标记用户身份）
+    val remark: String = "",   // 备注（用于标记用户身份）
+    val deviceId: String? = null,
+    val local: Boolean = false
 ) {
     /**
      * 显示名称（用于下拉列表）

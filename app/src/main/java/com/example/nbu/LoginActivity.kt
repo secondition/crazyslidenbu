@@ -1,8 +1,11 @@
 package com.example.nbu
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -26,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import java.io.DataInputStream
 import kotlin.coroutines.resume
 
 /**
@@ -42,26 +44,19 @@ class LoginActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { }
 
-    private val deviceFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) lifecycleScope.launch {
-            try {
-                val deviceId = withContext(Dispatchers.IO) {
-                    val input = contentResolver.openInputStream(uri) ?: error("无法读取设备标识文件")
-                    DataInputStream(input).use {
-                        val bytes = ByteArray(36)
-                        it.readFully(bytes)
-                        check(it.read() == -1) { "设备标识文件内容无效" }
-                        bytes.toString(Charsets.UTF_8)
-                    }
-                }
-                userManager.saveDeviceId(deviceId)
-                binding.tvStatus.visibility = View.GONE
-                Toast.makeText(this@LoginActivity, R.string.device_imported, Toast.LENGTH_SHORT).show()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                showError("设备标识导入失败，请选择原 App 的 cpdaily_external_did.jpg 文件")
-            }
+    private var loginPending = false
+    private val photoPermission: String
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
+            else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    private val photoLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        if (grants[photoPermission] == true) {
+            readLocalDevice()
+        } else {
+            loginPending = false
+            setLoadingState(false)
+            showError(getString(R.string.device_permission))
+            if (userManager.getAllUsers().isEmpty()) showUserManagementDialog()
         }
     }
 
@@ -77,6 +72,50 @@ class LoginActivity : AppCompatActivity() {
         
         setupViews()
         loadLastLogin()
+        if (savedInstanceState == null && userManager.getLocalDeviceId() == null && userManager.getAllUsers().isEmpty()) {
+            requestDeviceAccess()
+        }
+    }
+
+    private fun requestDeviceAccess() {
+        setLoadingState(true, "正在识别本机设备标识...")
+        if (ContextCompat.checkSelfPermission(this, photoPermission) == PackageManager.PERMISSION_GRANTED) {
+            readLocalDevice()
+        } else {
+            val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                arrayOf(photoPermission, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+            } else {
+                arrayOf(photoPermission)
+            }
+            photoLauncher.launch(permissions)
+        }
+    }
+
+    private fun readLocalDevice() {
+        lifecycleScope.launch {
+            try {
+                val deviceId = withContext(Dispatchers.IO) { userManager.readDeviceId() }
+                binding.tvStatus.setText(if (deviceId == null) R.string.device_missing else R.string.device_detected)
+                if (deviceId == null) {
+                    loginPending = false
+                    if (userManager.getAllUsers().isEmpty()) showUserManagementDialog()
+                    return@launch
+                }
+            } catch (e: CancellationException) {
+                loginPending = false
+                throw e
+            } catch (e: Exception) {
+                loginPending = false
+                showError(e.message ?: "读取共享设备标识失败")
+                return@launch
+            } finally {
+                setLoadingState(false)
+            }
+            if (loginPending) {
+                loginPending = false
+                performLogin()
+            }
+        }
     }
 
     private fun setupViews() {
@@ -142,7 +181,9 @@ class LoginActivity : AppCompatActivity() {
                 dialogBinding.tilPassword.error = null
             }
             
-            val user = User(username, password, remark)
+            val user = existingUser?.copy(password = password, remark = remark,
+                local = existingUser.local && existingUser.password == password) ?: User(username, password, remark)
+            if (existingUser != null && existingUser.password != password) userManager.clearAuthentication(username)
             userManager.saveUser(user)
             
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
@@ -234,11 +275,6 @@ class LoginActivity : AppCompatActivity() {
             dialog.dismiss()
         }
         
-        dialogBinding.btnImportDevice.setOnClickListener {
-            dialog.dismiss()
-            deviceFileLauncher.launch(arrayOf("*/*"))
-        }
-
         dialogBinding.btnClose.setOnClickListener {
             dialog.dismiss()
         }
@@ -267,21 +303,22 @@ class LoginActivity : AppCompatActivity() {
             binding.tilPassword.error = null
         }
         
-        if (userManager.getDeviceId() == null) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.import_device)
-                .setMessage("请选择风华宁大保存的设备标识文件：\nPictures/wismcp/did/cpdaily_external_did.jpg")
-                .setPositiveButton("选择文件") { _, _ -> deviceFileLauncher.launch(arrayOf("*/*")) }
-                .setNegativeButton("取消", null)
-                .show()
+        if (userManager.getDeviceId(username) == null) {
+            loginPending = true
+            requestDeviceAccess()
             return
         }
 
         setLoadingState(true, "正在登录...")
         lifecycleScope.launch {
             try {
+                val existingUser = userManager.getUser(username)
+                if (existingUser?.password != password) userManager.clearAuthentication(username)
                 val apiService = NbuApiService(username, userManager)
                 val session = apiService.login(password, ::requestVerificationCode).getOrThrow()
+                val deviceId = requireNotNull(userManager.getDeviceId(username))
+                userManager.saveUser(User(username, password, existingUser?.remark.orEmpty(), deviceId,
+                    local = deviceId == userManager.getLocalDeviceId()))
                 userManager.saveLastLogin(username, password)
                 binding.tvStatus.visibility = View.GONE
                 Toast.makeText(this@LoginActivity, "✓ 登录成功", Toast.LENGTH_SHORT).show()

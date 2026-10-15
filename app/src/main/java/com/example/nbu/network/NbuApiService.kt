@@ -84,7 +84,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         password: String,
         requestCode: suspend (String) -> String?
     ): Result<String> = result {
-        requireNotNull(userManager.getDeviceId()) { "请导入风华宁大的设备标识" }
+        requireNotNull(userManager.getDeviceId(username)) { "未识别到账号的设备标识" }
         ensurePlatformSession(password, requestCode)
         val cached = userManager.getCachedSession(username)
         if (cached != null && validateSession(cached)) return@result cached
@@ -202,7 +202,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
 
     private fun savePlatformSession(data: PlatformLoginResult, idsToken: String) {
         check(data.deviceStatus != "exception") {
-            data.deviceExceptionMsg ?: "平台未识别此设备，请导入原 App 的设备标识"
+            data.deviceExceptionMsg ?: "平台未识别此账号的设备身份"
         }
         check(data.status == "cpdailyPage" && data.authStatus == "auth") {
             data.msgTip ?: "平台账号认证未完成"
@@ -236,7 +236,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         val token = PlatformCipher.des(platform?.sessionToken.orEmpty(), "XCE927==")
         val info = gson.toJson(linkedMapOf(
             "systemName" to "android", "systemVersion" to Build.VERSION.RELEASE, "model" to Build.MODEL,
-            "deviceId" to requireNotNull(userManager.getDeviceId()), "appVersion" to "10.2.7", "cpdailyVersion" to "9.9.10",
+            "deviceId" to requireNotNull(userManager.getDeviceId(username)), "appVersion" to "10.2.7", "cpdailyVersion" to "9.9.10",
             "lon" to 0.0, "lat" to 0.0, "userId" to platform?.userId.orEmpty()
         ))
         return request(url)

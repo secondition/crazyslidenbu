@@ -46,14 +46,6 @@
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         app:strokeColor="@color/brand_primary"/>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnImportDevice"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/import_device"
-        android:textColor="@color/brand_primary"/>
-
     <TextView
         android:id="@+id/btnClose"
         android:layout_width="match_parent"
