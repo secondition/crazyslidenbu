@@ -1,11 +1,15 @@
 package com.example.nbu.network
 
+import android.net.Uri
+import android.os.Build
 import android.util.Log
-import com.example.nbu.model.BrowserProfile
 import com.example.nbu.model.Course
 import com.example.nbu.model.CourseResponse
+import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.SignResult
+import com.example.nbu.util.UserManager
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonSyntaxException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -13,11 +17,14 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.Cookie
 import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
 import java.util.Base64
@@ -30,15 +37,16 @@ import kotlin.coroutines.resumeWithException
 import kotlin.random.Random
 
 /**
- * NBU 统一身份认证与考勤服务
+ * NBU 平台认证与考勤服务
  */
-class NbuApiService(private val browser: BrowserProfile) {
+class NbuApiService(private val username: String, private val userManager: UserManager) {
 
     companion object {
         private const val TAG = "NbuApiService"
         private const val AES_CHARS = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
         private const val AUTH_URL = "https://uis.nbu.edu.cn/authserver/"
         private const val LOGIN_URL = "${AUTH_URL}login"
+        private const val PLATFORM_URL = "https://mobile.campushoy.com/"
         private const val SERVICE_URL = "https://attendance.nbu.edu.cn/api/getIndex"
         private const val USER_INFO_URL = "https://attendance.nbu.edu.cn/api/user/get/user/info"
         private const val COURSE_URL = "https://attendance.nbu.edu.cn/api/curriculum/student/getCourse"
@@ -63,91 +71,215 @@ class NbuApiService(private val browser: BrowserProfile) {
     }
 
     private val gson = Gson()
+    private val browser = userManager.getBrowserProfile(username)
+    private val cookies = SimpleCookieJar(userManager.getCookies(username))
+    private val accountClient = client.newBuilder().cookieJar(cookies).build()
+    private var platform = userManager.getPlatformSession(username)
 
-    /**
-     * 每次认证使用独立 CookieJar，避免多个账号共享认证状态。
-     */
     suspend fun login(
-        username: String,
         password: String,
         requestCode: suspend (String) -> String?
     ): Result<String> = result {
-        val cookies = SimpleCookieJar()
-        val loginClient = client.newBuilder().cookieJar(cookies).build()
-        val loginUrl = LOGIN_URL.toHttpUrl().newBuilder()
-            .addQueryParameter("service", SERVICE_URL)
-            .build()
-        val page = execute(loginClient, request(loginUrl.toString()).build())
-        page.requireSuccess("获取登录页面失败")
-        val salt = capture(page.text, """id="pwdEncryptSalt"\s+value="([^"]*)"""")
-            ?: error("登录页缺少 pwdEncryptSalt")
-        val execution = capture(page.text, """name="execution"\s+value="([^"]*)"""")
-            ?: error("登录页缺少 execution")
-        val eventId = capture(page.text, """id="_eventId"\s+name="_eventId"\s+value="([^"]*)"""")
-            ?: "submit"
-        val cllt = capture(page.text, """id="pwdLoginDiv"[\s\S]*?id="cllt"\s+name="cllt"\s+value="([^"]*)"""")
-            ?: "userNameLogin"
-        val dllt = capture(page.text, """id="dllt"\s+name="dllt"\s+value="([^"]*)"""")
-            ?: "generalLogin"
-        val fingerprintUrl = "${AUTH_URL}bfp/info".toHttpUrl().newBuilder()
-            .addQueryParameter("bfp", browser.fingerprint)
-            .build()
-        execute(
-            loginClient,
-            request(fingerprintUrl.toString()).header("X-Requested-With", "XMLHttpRequest").build()
-        ).requireSuccess("设置设备指纹失败")
-
-        val form = FormBody.Builder()
-            .add("username", username)
-            .add("password", encryptPassword(password, salt))
-            .add("captcha", "")
-            .add("_eventId", eventId)
-            .add("cllt", cllt)
-            .add("dllt", dllt)
-            .add("lt", "")
-            .add("execution", execution)
-            .build()
-        val response = execute(loginClient, request(loginUrl.toString()).post(form).build())
-        if (response.code !in listOf(301, 302, 303, 307, 308)) {
-            error(parseLoginError(response.text) ?: "登录失败，请检查账号密码或验证码要求（HTTP ${response.code}）")
-        }
-        var finalResponse = followRedirects(loginClient, response)
-        if (finalResponse.url.encodedPath == "/authserver/reAuthCheck/reAuthLoginView.do") {
-            finalResponse = authenticateDevice(loginClient, finalResponse, requestCode)
-        }
-        finalResponse.requireSuccess("登录跳转失败")
+        requireNotNull(userManager.getDeviceId()) { "请导入风华宁大的设备标识" }
+        ensurePlatformSession(password, requestCode)
+        val cached = userManager.getCachedSession(username)
+        if (cached != null && validateSession(cached)) return@result cached
+        userManager.clearSession(username)
+        restoreTgc(requireNotNull(platform).tgc)
+        val page = followRedirects(execute(accountClient, request(SERVICE_URL).build()))
+        page.requireSuccess("获取考勤页面失败")
         val jsessionId = cookies.getJSessionId(SERVICE_URL.toHttpUrl())
-            ?: error(parseLoginError(finalResponse.text) ?: "登录未完成，未获取到考勤会话")
-        check(validateSession(jsessionId, username).getOrThrow()) {
-            parseLoginError(finalResponse.text) ?: "登录未完成，账号校验失败"
-        }
+            ?: error("未取得考勤登录会话")
+        check(validateSession(jsessionId)) { "考勤账号校验失败" }
+        userManager.saveSession(username, jsessionId)
         jsessionId
     }
 
+    private suspend fun ensurePlatformSession(password: String, requestCode: suspend (String) -> String?) {
+        val cached = platform
+        if (cached != null) {
+            val data = try {
+                val response = platformPost("v6/auth/authentication/new/validation", mapOf(
+                    "tgc" to PlatformCipher.des(cached.tgc, "XCE927=="),
+                    "idsToken" to PlatformCipher.des(cached.idsToken, "XCE927==")
+                ))
+                gson.fromJson(response, PlatformLoginResult::class.java)
+            } catch (_: SessionExpiredException) {
+                null
+            }
+            if (data != null && data.tgcStatus != "tgcInvalidate") {
+                savePlatformSession(data, cached.idsToken)
+                return
+            }
+        }
+        platform = null
+        userManager.clearPlatformSession(username)
+        for (domain in listOf("campushoy.com", "cpdaily.com")) cookies.remove("sessionToken", domain)
+        userManager.saveCookies(username, cookies.snapshot())
+
+        val keys = PlatformCipher.secretResponse(platformPost(
+            "app/auth/dynamic/secret/getSecretKey/v-920", PlatformCipher.secretRequest()
+        ).asString)
+        check(keys.size >= 3) { "平台密钥响应不完整" }
+        val key = keys[1]
+        val tenantUrl = "${PLATFORM_URL}v6/config/guest/tenant/info/v-8222".toHttpUrl().newBuilder()
+            .addQueryParameter("a", PlatformCipher.encrypt("nbu", key))
+            .addQueryParameter("b", "first_v4")
+            .build()
+        val tenantData = platformData(execute(accountClient, platformRequest(tenantUrl.toString()).build())).asString
+        val tenant = gson.fromJson(PlatformCipher.decrypt(tenantData, key), Array<Tenant>::class.java)
+            .firstOrNull() ?: error("平台未返回学校配置")
+        check(tenant.id == "nbu" && tenant.joinType == "NOTCLOUD") { "无法识别学校登录方式" }
+        val ticket = mobileLogin(tenant, password, requestCode)
+        val payload = gson.toJson(mapOf("c" to tenant.id, "d" to ticket))
+        val response = platformPost("app/auth/authentication/notcloud/login/v-8222", mapOf(
+            "a" to PlatformCipher.encrypt(payload, key),
+            "b" to "first_v4"
+        )).asString
+        savePlatformSession(gson.fromJson(PlatformCipher.decrypt(response, key), PlatformLoginResult::class.java), ticket)
+    }
+
+    private suspend fun mobileLogin(
+        tenant: Tenant,
+        password: String,
+        requestCode: suspend (String) -> String?
+    ): String {
+        val entry = "${tenant.idsUrl.trimEnd('/')}/mobile/auth".toHttpUrl().newBuilder()
+            .addQueryParameter("appId", tenant.appId)
+            .build()
+        var page = execute(accountClient, request(entry.toString()).header("CpdailyAuthType", "Login").build())
+        var loginUrl: HttpUrl? = null
+        var submitted = false
+        repeat(10) {
+            if (page.url.encodedPath == "/authserver/login") loginUrl = page.url
+            when {
+                page.isRedirect -> {
+                    val target = page.redirectUrl()
+                    if (target.host == entry.host && target.encodedPath == "${entry.encodedPath.substringBeforeLast('/')}/default.html") {
+                        return Uri.decode(capture(target.toString(), """mobile_\w*=(.*)""")
+                            ?: error("移动端回调缺少登录票据"))
+                    }
+                    page = execute(accountClient, request(target.toString()).header("CpdailyAuthType", "Login").build())
+                }
+                page.url.encodedPath == "/authserver/reAuthCheck/reAuthLoginView.do" -> {
+                    page = authenticateDevice(page, loginUrl ?: error("认证页面缺少登录入口"), requestCode)
+                }
+                page.url.encodedPath == "/authserver/login" && !submitted -> {
+                    page.requireSuccess("获取登录页面失败")
+                    val salt = capture(page.text, """id="pwdEncryptSalt"\s+value="([^"]*)"""")
+                        ?: error(parseLoginError(page.text) ?: "登录页缺少 pwdEncryptSalt")
+                    val execution = capture(page.text, """name="execution"\s+value="([^"]*)"""")
+                        ?: error("登录页缺少 execution")
+                    val eventId = capture(page.text, """id="_eventId"\s+name="_eventId"\s+value="([^"]*)"""") ?: "submit"
+                    val cllt = capture(page.text, """id="pwdLoginDiv"[\s\S]*?id="cllt"\s+name="cllt"\s+value="([^"]*)"""") ?: "userNameLogin"
+                    val dllt = capture(page.text, """id="dllt"\s+name="dllt"\s+value="([^"]*)"""") ?: "generalLogin"
+                    val fingerprintUrl = "${AUTH_URL}bfp/info".toHttpUrl().newBuilder()
+                        .addQueryParameter("bfp", browser.fingerprint).build()
+                    execute(accountClient, request(fingerprintUrl.toString())
+                        .header("X-Requested-With", "XMLHttpRequest").build()).requireSuccess("设置设备指纹失败")
+                    val form = FormBody.Builder()
+                        .add("username", username)
+                        .add("password", encryptPassword(password, salt))
+                        .add("captcha", "")
+                        .add("_eventId", eventId)
+                        .add("cllt", cllt)
+                        .add("dllt", dllt)
+                        .add("lt", "")
+                        .add("execution", execution)
+                        .build()
+                    submitted = true
+                    page = execute(accountClient, request(page.url.toString()).header("CpdailyAuthType", "Login").post(form).build())
+                }
+                else -> error(parseLoginError(page.text) ?: "移动端登录未完成（HTTP ${page.code}）")
+            }
+        }
+        error("移动端登录跳转次数过多")
+    }
+
+    private fun savePlatformSession(data: PlatformLoginResult, idsToken: String) {
+        check(data.deviceStatus != "exception") {
+            data.deviceExceptionMsg ?: "平台未识别此设备，请导入原 App 的设备标识"
+        }
+        check(data.status == "cpdailyPage" && data.authStatus == "auth") {
+            data.msgTip ?: "平台账号认证未完成"
+        }
+        val token = data.sessionToken?.takeIf { it.isNotBlank() } ?: error("平台响应缺少登录会话")
+        val userId = data.userId?.takeIf { it.isNotBlank() } ?: error("平台响应缺少用户信息")
+        val tgc = data.tgc?.takeIf { it.isNotBlank() } ?: error("平台响应缺少学校登录凭据")
+        val session = PlatformSession(token, userId, tgc, idsToken)
+        platform = session
+        userManager.savePlatformSession(username, session)
+        for (domain in listOf("campushoy.com", "cpdaily.com")) {
+            val values = mapOf("sessionToken" to token, "tenantId" to "nbu", "clientType" to "cpdaily_student", "standAlone" to "1")
+            cookies.saveFromResponse("https://$domain/".toHttpUrl(), values.map { (name, value) ->
+                Cookie.Builder().name(name).value(value).domain(domain).path("/").build()
+            })
+        }
+        restoreTgc(tgc)
+    }
+
+    private fun restoreTgc(tgc: String) {
+        val url = AUTH_URL.toHttpUrl()
+        val values = listOf("CASTGC", "AUTHTGC").map { name ->
+            cookies.remove(name, url.host)
+            Cookie.Builder().name(name).value(tgc).hostOnlyDomain(url.host).path(url.encodedPath.trimEnd('/')).build()
+        }
+        cookies.saveFromResponse(url, values)
+        userManager.saveCookies(username, cookies.snapshot())
+    }
+
+    private fun platformRequest(url: String): Request.Builder {
+        val token = PlatformCipher.des(platform?.sessionToken.orEmpty(), "XCE927==")
+        val info = gson.toJson(linkedMapOf(
+            "systemName" to "android", "systemVersion" to Build.VERSION.RELEASE, "model" to Build.MODEL,
+            "deviceId" to requireNotNull(userManager.getDeviceId()), "appVersion" to "10.2.7", "cpdailyVersion" to "9.9.10",
+            "lon" to 0.0, "lat" to 0.0, "userId" to platform?.userId.orEmpty()
+        ))
+        return request(url)
+            .header("sessionTokenKey", token)
+            .header("SessionToken", token)
+            .header("clientType", "cpdaily_student")
+            .header("tenantId", "nbu")
+            .header("deviceType", "1")
+            .header("CpdailyClientType", "CPDAILY")
+            .header("CpdailyStandAlone", "1")
+            .header("CpdailyInfo", PlatformCipher.des(info, "ST83=@XV"))
+    }
+
+    private suspend fun platformPost(path: String, data: Map<String, String>): JsonElement {
+        val body = gson.toJson(data).toRequestBody("application/json; charset=utf-8".toMediaType())
+        return platformData(execute(accountClient, platformRequest(PLATFORM_URL + path).post(body).build()))
+    }
+
+    private fun platformData(response: HttpResponse): JsonElement {
+        if (response.code == 401) throw SessionExpiredException()
+        response.requireSuccess("平台请求失败")
+        val data = gson.fromJson(response.text, PlatformResponse::class.java) ?: error("平台响应为空")
+        val code = data.errCode ?: data.code ?: data.status
+        if (code in listOf("-206", "1202")) throw SessionExpiredException()
+        check(code in listOf("0", "200")) { data.errMsg ?: data.message ?: "平台请求失败（$code）" }
+        return data.data ?: error("平台响应缺少数据")
+    }
+
     private suspend fun authenticateDevice(
-        loginClient: OkHttpClient,
         page: HttpResponse,
+        loginUrl: HttpUrl,
         requestCode: suspend (String) -> String?
     ): HttpResponse {
         page.requireSuccess("获取设备认证页面失败")
-        val userId = capture(page.text, """"reAuthUserId"\s*:\s*"([^"]*)"""")
-            ?: error("设备认证页面缺少用户信息")
-        val multifactor = capture(page.text, """"isMultifactor"\s*:\s*"([^"]*)"""")
-            ?: error("设备认证页面缺少认证参数")
-        val authType = capture(page.text, """"reAuthType"\s*:\s*"([^"]*)"""")
-            ?: error("设备认证页面缺少认证方式")
+        val service = page.url.queryParameter("service") ?: error("设备认证页面缺少服务地址")
+        val userId = capture(page.text, """"reAuthUserId"\s*:\s*"([^"]*)"""") ?: error("设备认证页面缺少用户信息")
+        val multifactor = capture(page.text, """"isMultifactor"\s*:\s*"([^"]*)"""") ?: error("设备认证页面缺少认证参数")
+        val authType = capture(page.text, """"reAuthType"\s*:\s*"([^"]*)"""") ?: error("设备认证页面缺少认证方式")
         if (authType != "5") {
-            val response = authPost(loginClient, "reAuthCheck/changeReAuthType.do", mapOf(
-                "isMultifactor" to multifactor,
-                "reAuthType" to "5",
-                "service" to SERVICE_URL
+            val response = authPost("reAuthCheck/changeReAuthType.do", mapOf(
+                "isMultifactor" to multifactor, "reAuthType" to "5", "service" to service
             ))
             val data = gson.fromJson(response.text, ReAuthTypeResponse::class.java)
             check(data?.code == 1) { data?.message ?: "选择风华宁大认证失败" }
         }
-        val sent = authPost(loginClient, "dynamicCode/getDynamicCodeByReauth.do", mapOf(
-            "userName" to userId,
-            "authCodeTypeName" to "reAuthCpdailyDynamicCodeType"
+        val sent = authPost("dynamicCode/getDynamicCodeByReauth.do", mapOf(
+            "userName" to userId, "authCodeTypeName" to "reAuthCpdailyDynamicCodeType"
         ))
         val codeResponse = gson.fromJson(sent.text, DynamicCodeResponse::class.java)
         check(codeResponse?.res in listOf("cpdaily_success", "other_success", "success", "code_time_fail")) {
@@ -155,58 +287,46 @@ class NbuApiService(private val browser: BrowserProfile) {
         }
         val code = requestCode(codeResponse?.returnMessage ?: "请查看风华宁大收到的验证码")
             ?: throw CancellationException("已取消登录")
-        val submitted = authPost(loginClient, "reAuthCheck/reAuthSubmit.do", mapOf(
-            "service" to SERVICE_URL,
-            "reAuthType" to "5",
-            "isMultifactor" to multifactor,
-            "dynamicCode" to code,
-            "skipTmpReAuth" to "true"
+        val submitted = authPost("reAuthCheck/reAuthSubmit.do", mapOf(
+            "service" to service, "reAuthType" to "5", "isMultifactor" to multifactor,
+            "dynamicCode" to code, "skipTmpReAuth" to "true"
         ))
         val authResponse = gson.fromJson(submitted.text, ReAuthResponse::class.java)
         check(!authResponse?.code.isNullOrBlank()) { "设备认证响应缺少结果" }
         check(authResponse?.code !in listOf("reAuth_failed", "reAuth_unauthorized")) {
             authResponse?.msg ?: "设备认证失败"
         }
-        val url = LOGIN_URL.toHttpUrl().newBuilder().addQueryParameter("service", SERVICE_URL).build()
-        return followRedirects(loginClient, execute(loginClient, request(url.toString()).build()))
+        return execute(accountClient, request(loginUrl.toString()).header("CpdailyAuthType", "Login").build())
     }
 
-    private suspend fun authPost(
-        loginClient: OkHttpClient,
-        path: String,
-        params: Map<String, String>
-    ): HttpResponse {
+    private suspend fun authPost(path: String, params: Map<String, String>): HttpResponse {
         val form = FormBody.Builder()
         params.forEach { (name, value) -> form.add(name, value) }
-        val response = execute(loginClient, request(AUTH_URL + path)
-            .header("X-Requested-With", "XMLHttpRequest")
-            .post(form.build())
-            .build())
+        val response = execute(accountClient, request(AUTH_URL + path)
+            .header("X-Requested-With", "XMLHttpRequest").post(form.build()).build())
         response.requireSuccess("设备认证请求失败")
         return response
     }
 
-    private suspend fun followRedirects(loginClient: OkHttpClient, initial: HttpResponse): HttpResponse {
+    private suspend fun followRedirects(initial: HttpResponse): HttpResponse {
         var response = initial
         repeat(10) {
-            if (response.code !in listOf(301, 302, 303, 307, 308)) return response
-            val location = response.location ?: error("登录跳转缺少 Location")
-            val url = response.url.resolve(location) ?: error("无法解析登录跳转地址")
-            response = execute(loginClient, request(url.toString()).build())
+            if (!response.isRedirect) return response
+            response = execute(accountClient, request(response.redirectUrl().toString()).build())
         }
-        check(response.code !in listOf(301, 302, 303, 307, 308)) { "登录跳转次数过多" }
+        check(!response.isRedirect) { "登录跳转次数过多" }
         return response
     }
 
-    suspend fun validateSession(jsessionId: String, username: String): Result<Boolean> = result {
+    private suspend fun validateSession(jsessionId: String): Boolean {
         val response = execute(client, request(USER_INFO_URL, jsessionId).build())
-        if (response.code !in 200..299) return@result false
+        if (response.code !in 200..299) return false
         val info = try {
             gson.fromJson(response.text, UserInfoResponse::class.java)
         } catch (_: JsonSyntaxException) {
-            return@result false
+            return false
         }
-        info?.code == 20000 && info.success == true && info.data?.student?.xh == username
+        return info?.code == 20000 && info.success == true && info.data?.student?.xh == username
     }
 
     suspend fun getCourses(jsessionId: String): Result<List<Course>> = result {
@@ -278,7 +398,11 @@ class NbuApiService(private val browser: BrowserProfile) {
                 override fun onResponse(call: Call, response: Response) {
                     val data = try {
                         response.use {
-                            HttpResponse(it.code, it.request.url, it.header("Location"), it.body?.string().orEmpty())
+                            val text = it.body?.string().orEmpty()
+                            if (httpClient === accountClient && it.headers.values("Set-Cookie").isNotEmpty()) {
+                                userManager.saveCookies(username, cookies.snapshot())
+                            }
+                            HttpResponse(it.code, it.request.url, it.header("Location"), text)
                         }
                     } catch (e: Exception) {
                         continuation.resumeWithException(e)
@@ -321,18 +445,41 @@ class NbuApiService(private val browser: BrowserProfile) {
         (1..length).map { AES_CHARS[Random.nextInt(AES_CHARS.length)] }.joinToString("")
 
     private data class HttpResponse(val code: Int, val url: HttpUrl, val location: String?, val text: String) {
+        val isRedirect: Boolean get() = code in listOf(301, 302, 303, 307, 308)
+
+        fun redirectUrl(): HttpUrl = url.resolve(location ?: error("登录跳转缺少 Location")) ?: error("无法解析登录跳转地址")
+
         fun requireSuccess(message: String) {
             check(code in 200..299) { "$message（HTTP $code）" }
         }
 
         fun requireSession() {
-            if (code == 401 || code in listOf(301, 302, 303, 307, 308) ||
-                (code in 200..299 && text.trimStart().startsWith("<"))) {
+            if (code == 401 || isRedirect || (code in 200..299 && text.trimStart().startsWith("<"))) {
                 throw SessionExpiredException()
             }
         }
     }
 
+    private data class Tenant(val id: String, val joinType: String, val idsUrl: String, val appId: String)
+    private data class PlatformResponse(
+        val errCode: String?,
+        val code: String?,
+        val status: String?,
+        val errMsg: String?,
+        val message: String?,
+        val data: JsonElement?
+    )
+    private data class PlatformLoginResult(
+        val status: String?,
+        val authStatus: String?,
+        val deviceStatus: String?,
+        val deviceExceptionMsg: String?,
+        val sessionToken: String?,
+        val userId: String?,
+        val tgc: String?,
+        val tgcStatus: String?,
+        val msgTip: String?
+    )
     private data class ReAuthTypeResponse(val code: Int?, val message: String?)
     private data class DynamicCodeResponse(val res: String?, val returnMessage: String?)
     private data class ReAuthResponse(val code: String?, val msg: String?)

@@ -29,7 +29,7 @@ class SignActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivitySignBinding
-    private val apiService by lazy { NbuApiService(userManager.getBrowserProfile(username)) }
+    private val apiService by lazy { NbuApiService(username, userManager) }
     private lateinit var adapter: CourseAdapter
     private lateinit var userManager: UserManager
     

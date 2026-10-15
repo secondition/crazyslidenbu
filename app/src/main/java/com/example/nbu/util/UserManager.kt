@@ -4,9 +4,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.example.nbu.model.BrowserProfile
+import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.User
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import okhttp3.Cookie
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.UUID
 import kotlin.random.Random
 
@@ -27,6 +30,9 @@ class UserManager(context: Context) {
         private const val KEY_LAST_PASSWORD = "last_password"
         
         private const val KEY_PREFIX_BROWSER = "browser_"
+        private const val KEY_PREFIX_PLATFORM = "platform_"
+        private const val KEY_PREFIX_COOKIES = "cookies_"
+        private const val KEY_DEVICE_ID = "device_id"
         private const val SESSION_EXPIRE_TIME = 24 * 60 * 60 * 1000L
     }
     
@@ -71,6 +77,8 @@ class UserManager(context: Context) {
         
         // 同时清除该用户的 Session 缓存
         clearSession(username)
+        clearPlatformSession(username)
+        prefs.edit { remove(KEY_PREFIX_COOKIES + username) }
     }
     
     /**
@@ -99,6 +107,50 @@ class UserManager(context: Context) {
         )
         prefs.edit { putString(key, gson.toJson(profile)) }
         return profile
+    }
+
+    fun getDeviceId(): String? = prefs.getString(KEY_DEVICE_ID, null)
+
+    fun saveDeviceId(deviceId: String) {
+        require(deviceId.length == 36) { "设备标识无效" }
+        UUID.fromString(deviceId)
+        val sessions = if (getDeviceId() != deviceId) {
+            prefs.all.keys.filter { it.startsWith(KEY_PREFIX_PLATFORM) }
+        } else {
+            emptyList()
+        }
+        prefs.edit {
+            sessions.forEach { remove(it) }
+            putString(KEY_DEVICE_ID, deviceId)
+        }
+    }
+
+    fun getPlatformSession(username: String): PlatformSession? {
+        val json = prefs.getString(KEY_PREFIX_PLATFORM + username, null) ?: return null
+        return gson.fromJson(json, PlatformSession::class.java)
+    }
+
+    fun savePlatformSession(username: String, session: PlatformSession) {
+        prefs.edit { putString(KEY_PREFIX_PLATFORM + username, gson.toJson(session)) }
+    }
+
+    fun clearPlatformSession(username: String) {
+        prefs.edit { remove(KEY_PREFIX_PLATFORM + username) }
+    }
+
+    fun getCookies(username: String): List<Cookie> {
+        val json = prefs.getString(KEY_PREFIX_COOKIES + username, null) ?: return emptyList()
+        val type = object : TypeToken<Map<String, List<String>>>() {}.type
+        val domains: Map<String, List<String>> = gson.fromJson(json, type)
+        return domains.flatMap { (domain, values) ->
+            val url = "https://$domain/".toHttpUrl()
+            values.mapNotNull { Cookie.parse(url, it) }
+        }
+    }
+
+    fun saveCookies(username: String, cookies: List<Cookie>) {
+        val domains = cookies.groupBy { it.domain }.mapValues { (_, values) -> values.map { it.toString() } }
+        prefs.edit { putString(KEY_PREFIX_COOKIES + username, gson.toJson(domains)) }
     }
 
     // ==================== Session 缓存管理 ====================

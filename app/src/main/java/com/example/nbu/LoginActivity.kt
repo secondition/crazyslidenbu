@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.io.DataInputStream
 import kotlin.coroutines.resume
 
 /**
@@ -40,6 +41,29 @@ class LoginActivity : AppCompatActivity() {
     private val signActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { }
+
+    private val deviceFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) lifecycleScope.launch {
+            try {
+                val deviceId = withContext(Dispatchers.IO) {
+                    val input = contentResolver.openInputStream(uri) ?: error("无法读取设备标识文件")
+                    DataInputStream(input).use {
+                        val bytes = ByteArray(36)
+                        it.readFully(bytes)
+                        check(it.read() == -1) { "设备标识文件内容无效" }
+                        bytes.toString(Charsets.UTF_8)
+                    }
+                }
+                userManager.saveDeviceId(deviceId)
+                binding.tvStatus.visibility = View.GONE
+                Toast.makeText(this@LoginActivity, R.string.device_imported, Toast.LENGTH_SHORT).show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                showError("设备标识导入失败，请选择原 App 的 cpdaily_external_did.jpg 文件")
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -210,6 +234,11 @@ class LoginActivity : AppCompatActivity() {
             dialog.dismiss()
         }
         
+        dialogBinding.btnImportDevice.setOnClickListener {
+            dialog.dismiss()
+            deviceFileLauncher.launch(arrayOf("*/*"))
+        }
+
         dialogBinding.btnClose.setOnClickListener {
             dialog.dismiss()
         }
@@ -238,20 +267,21 @@ class LoginActivity : AppCompatActivity() {
             binding.tilPassword.error = null
         }
         
+        if (userManager.getDeviceId() == null) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.import_device)
+                .setMessage("请选择风华宁大保存的设备标识文件：\nPictures/wismcp/did/cpdaily_external_did.jpg")
+                .setPositiveButton("选择文件") { _, _ -> deviceFileLauncher.launch(arrayOf("*/*")) }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
+
         setLoadingState(true, "正在登录...")
         lifecycleScope.launch {
             try {
-                val apiService = NbuApiService(userManager.getBrowserProfile(username))
-                var session = userManager.getCachedSession(username)
-                if (session != null && !apiService.validateSession(session, username).getOrThrow()) {
-                    userManager.clearSession(username)
-                    session = null
-                }
-                if (session == null) {
-                    session = apiService.login(username, password, ::requestVerificationCode)
-                        .getOrThrow()
-                    userManager.saveSession(username, session)
-                }
+                val apiService = NbuApiService(username, userManager)
+                val session = apiService.login(password, ::requestVerificationCode).getOrThrow()
                 userManager.saveLastLogin(username, password)
                 binding.tvStatus.visibility = View.GONE
                 Toast.makeText(this@LoginActivity, "✓ 登录成功", Toast.LENGTH_SHORT).show()

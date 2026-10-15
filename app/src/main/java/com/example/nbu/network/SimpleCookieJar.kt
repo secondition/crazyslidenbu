@@ -7,9 +7,9 @@ import okhttp3.HttpUrl
 /**
  * 按域名、路径和有效期管理认证 Cookie。
  */
-class SimpleCookieJar : CookieJar {
+class SimpleCookieJar(cookies: List<Cookie> = emptyList()) : CookieJar {
 
-    private val cookieStore = mutableListOf<Cookie>()
+    private val cookieStore = cookies.toMutableList()
 
     @Synchronized
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
@@ -25,6 +25,16 @@ class SimpleCookieJar : CookieJar {
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
         cookieStore.removeAll { it.expiresAt <= System.currentTimeMillis() }
         return cookieStore.filter { it.matches(url) }.sortedByDescending { it.path.length }
+    }
+
+    @Synchronized
+    fun snapshot(): List<Cookie> = cookieStore.toList()
+
+    @Synchronized
+    fun remove(name: String, domain: String) {
+        cookieStore.removeAll {
+            it.name == name && (it.domain == domain || it.domain.endsWith(".$domain"))
+        }
     }
 
     fun getJSessionId(url: HttpUrl): String? =
