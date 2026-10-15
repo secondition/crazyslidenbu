@@ -32,6 +32,17 @@
     </LinearLayout>
 
     <ImageView
+        android:id="@+id/btnShare"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:padding="12dp"
+        android:src="@android:drawable/ic_menu_share"
+        android:contentDescription="@string/share_account"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        app:tint="@color/brand_primary"
+        xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+    <ImageView
         android:id="@+id/btnEdit"
         android:layout_width="36dp"
         android:layout_height="36dp"
