@@ -22,28 +22,4 @@
         <item name="zxing_viewfinder_laser">@color/brand_primary</item>
     </style>
 
-    <style name="LoginTitle">
-        <item name="android:textSize">52sp</item>
-        <item name="android:textStyle">italic</item>
-        <item name="android:fontFamily">sans-serif-black</item>
-        <item name="android:textColor">@color/on_header</item>
-        <item name="android:letterSpacing">-0.02</item>
-        <item name="android:shadowColor">#40000000</item>
-        <item name="android:shadowDx">4</item>
-        <item name="android:shadowDy">4</item>
-        <item name="android:shadowRadius">8</item>
-    </style>
-
-    <style name="LoginTitleAccent">
-        <item name="android:textSize">24sp</item>
-        <item name="android:textStyle">italic</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:letterSpacing">0.12</item>
-        <item name="android:textColor">@color/on_header</item>
-        <item name="android:shadowColor">#40000000</item>
-        <item name="android:shadowDx">2</item>
-        <item name="android:shadowDy">2</item>
-        <item name="android:shadowRadius">6</item>
-    </style>
-
 </resources>
