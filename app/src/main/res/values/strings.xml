@@ -41,6 +41,9 @@
     <string name="activity_scan">活动扫码</string>
     <string name="scan">扫一扫</string>
     <string name="scan_prompt">将活动二维码放入框内</string>
+    <string name="scan_album">相册</string>
+    <string name="image_no_code">图片中未识别到二维码，请选择清晰的二维码图片</string>
+    <string name="image_read_failed">图片读取失败：%1$s</string>
     <string name="activity_authorizing">正在授权活动页面…</string>
     <string name="activity_page_failed">活动页面加载失败</string>
     <string name="activity_http_error">活动页面加载失败（HTTP %1$d）</string>
