@@ -55,6 +55,15 @@
         android:visibility="gone"/>
 
     <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnGroupLogin"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:text="@string/group_login"
+        android:visibility="gone"
+        app:cornerRadius="8dp"/>
+
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnAddLocal"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

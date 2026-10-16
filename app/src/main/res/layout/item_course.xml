@@ -90,6 +90,18 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/tvClassroom"/>
 
+        <TextView
+            android:id="@+id/tvMembers"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvTeacher"/>
+
         <!-- 签到区域 Group -->
         <androidx.constraintlayout.widget.Group
             android:id="@+id/signArea"
@@ -111,7 +123,7 @@
             app:endIconMode="clear_text"
             app:endIconTint="@color/text_secondary"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/tvTeacher"
+            app:layout_constraintTop_toBottomOf="@id/tvMembers"
             app:layout_constraintEnd_toEndOf="parent">
 
             <com.google.android.material.textfield.TextInputEditText

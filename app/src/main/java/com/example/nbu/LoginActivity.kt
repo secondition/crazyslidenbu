@@ -11,6 +11,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.widget.CheckBox
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
@@ -18,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.children
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.example.nbu.databinding.ActivityLoginBinding
@@ -52,6 +54,8 @@ class LoginActivity : AppCompatActivity() {
     private var page = Page.LOGIN
     private var roundTrips = 0
     private var validation: Job? = null
+    private var authentication: Job? = null
+    private val selectedAccounts = linkedSetOf<String>()
 
     private val signActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
     private val accountScanner = registerForActivityResult(ScanContract()) { result ->
@@ -103,6 +107,7 @@ class LoginActivity : AppCompatActivity() {
             binding.passwordField.visibility = if (selectedUser == null) View.VISIBLE else View.GONE
         }
         roundTrips = savedInstanceState?.getInt("roundTrips") ?: 0
+        selectedAccounts.addAll(savedInstanceState?.getStringArrayList("group").orEmpty())
         currentAccount = savedInstanceState?.getString("account")?.let(userManager::getUser)
         when (Page.valueOf(savedInstanceState?.getString("page") ?: Page.LOGIN.name)) {
             Page.LOGIN -> showPage(Page.LOGIN)
@@ -126,6 +131,7 @@ class LoginActivity : AppCompatActivity() {
         outState.putString("account", currentAccount?.username)
         outState.putString("selectedUser", selectedUser?.username)
         outState.putInt("roundTrips", roundTrips)
+        outState.putStringArrayList("group", ArrayList(selectedAccounts))
     }
 
     private fun setupViews() {
@@ -157,6 +163,10 @@ class LoginActivity : AppCompatActivity() {
             true
         }
         binding.accounts.btnClose.setOnClickListener { showPage(Page.LOGIN) }
+        binding.accounts.btnGroupLogin.setOnClickListener {
+            val users = selectedAccounts.mapNotNull(userManager::getUser)
+            if (users.size >= 2) authenticateAccounts(users)
+        }
         binding.accounts.btnAddLocal.setOnClickListener {
             if (userManager.getLocalDeviceId() != null) showEditor(null) else requestDeviceAccess()
         }
@@ -187,6 +197,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun showPage(target: Page) {
+        if (page != target) authentication?.cancel()
         page = target
         if (target != Page.EDITOR) {
             validation?.cancel()
@@ -205,6 +216,8 @@ class LoginActivity : AppCompatActivity() {
         accounts.llUserList.removeAllViews()
         accounts.tvAccountStatus.visibility = View.GONE
         val users = userManager.getAllUsers()
+        selectedAccounts.retainAll(users.map { it.username }.toSet())
+        updateGroupLogin()
         accounts.btnAddLocal.visibility = if (users.any { it.local }) View.GONE else View.VISIBLE
         if (users.isEmpty()) {
             accounts.llUserList.addView(TextView(this).apply {
@@ -226,14 +239,30 @@ class LoginActivity : AppCompatActivity() {
                     userManager.getCachedSession(user.username) != null) View.VISIBLE else View.GONE
                 setOnClickListener { showAccountCode(user) }
             }
+            val selection = item.findViewById<CheckBox>(R.id.selectAccount)
+            selection.isChecked = user.username in selectedAccounts
+            selection.contentDescription = getString(R.string.select_named_account, user.displayName)
+            selection.setOnCheckedChangeListener { _, checked ->
+                if (checked) selectedAccounts.add(user.username) else selectedAccounts.remove(user.username)
+                updateGroupLogin()
+            }
             item.findViewById<View>(R.id.btnEdit).setOnClickListener { showEditor(user) }
             item.findViewById<View>(R.id.btnDelete).setOnClickListener { showRemoval(user) }
             item.setOnClickListener {
-                fillAccount(user)
-                showPage(Page.LOGIN)
-                performLogin()
+                if (selectedAccounts.isNotEmpty()) selection.performClick() else {
+                    fillAccount(user)
+                    showPage(Page.LOGIN)
+                    performLogin()
+                }
             }
             accounts.llUserList.addView(item)
+        }
+    }
+
+    private fun updateGroupLogin() {
+        binding.accounts.btnGroupLogin.apply {
+            visibility = if (selectedAccounts.size >= 2) View.VISIBLE else View.GONE
+            text = getString(R.string.group_login_count, selectedAccounts.size)
         }
     }
 
@@ -376,26 +405,47 @@ class LoginActivity : AppCompatActivity() {
             return
         }
         binding.tilPassword.error = null
+        val existing = userManager.getUser(username)
+        authenticateAccounts(listOf(existing?.copy(password = password) ?: User(username, password)))
+    }
+
+    private fun authenticateAccounts(users: List<User>) {
+        if (authentication?.isActive == true) return
+        val sourcePage = page
+        val content = if (page == Page.ACCOUNTS) binding.accounts.root else binding.credentials
         setLoadingState(true, getString(R.string.logging_in))
-        lifecycleScope.launch {
+        authentication = lifecycleScope.launch {
             try {
-                val existing = userManager.getUser(username)
-                val session = NbuApiService(username, userManager).login(password) { message ->
-                    requestVerificationCode(message, binding.credentials, binding.verification)
-                }.getOrThrow()
-                userManager.saveUser(existing?.copy(password = password) ?: User(username, password))
-                userManager.saveLastLogin(username, password)
-                binding.tvStatus.visibility = View.GONE
-                Toast.makeText(this@LoginActivity, R.string.logged_in, Toast.LENGTH_SHORT).show()
-                signActivityLauncher.launch(Intent(this@LoginActivity, SignActivity::class.java)
-                    .putExtra(SignActivity.EXTRA_JSESSION_ID, session).putExtra(SignActivity.EXTRA_USERNAME, username))
+                val failures = mutableListOf<String>()
+                users.forEachIndexed { index, user ->
+                    if (users.size > 1) setLoadingState(true,
+                        getString(R.string.group_authenticating, user.displayName, index + 1, users.size))
+                    val result = NbuApiService(user.username, userManager).login(user.password) { message ->
+                        requestVerificationCode("${user.displayName}\n$message", content, binding.verification)
+                    }
+                    result.onSuccess { userManager.saveUser(user) }
+                        .onFailure { failures.add("${user.displayName}：${it.message}") }
+                }
+                if (failures.isNotEmpty()) {
+                    showError(failures.joinToString("\n"))
+                } else {
+                    if (users.size == 1) userManager.saveLastLogin(users.first().username, users.first().password)
+                    binding.tvStatus.visibility = View.GONE
+                    binding.accounts.tvAccountStatus.visibility = View.GONE
+                    Toast.makeText(this@LoginActivity, R.string.logged_in, Toast.LENGTH_SHORT).show()
+                    signActivityLauncher.launch(Intent(this@LoginActivity, SignActivity::class.java)
+                        .putStringArrayListExtra(SignActivity.EXTRA_USERNAMES, ArrayList(users.map { it.username })))
+                }
             } catch (e: CancellationException) {
                 binding.tvStatus.visibility = View.GONE
+                binding.accounts.tvAccountStatus.visibility = View.GONE
                 throw e
             } catch (e: Exception) {
                 showError(e.message ?: getString(R.string.login_failed))
             } finally {
+                authentication = null
                 setLoadingState(false)
+                if (page != sourcePage) content.visibility = View.GONE
             }
         }
     }
@@ -408,6 +458,13 @@ class LoginActivity : AppCompatActivity() {
         binding.passwordSlider.isEnabled = !busy
         binding.accounts.btnAddLocal.isEnabled = !busy
         binding.accounts.btnAddUser.isEnabled = !busy
+        binding.accounts.btnGroupLogin.isEnabled = !busy
+        binding.accounts.llUserList.children.forEach { item ->
+            item.isEnabled = !busy
+            for (id in listOf(R.id.selectAccount, R.id.btnShare, R.id.btnEdit, R.id.btnDelete)) {
+                item.findViewById<View>(id)?.isEnabled = !busy
+            }
+        }
         binding.progressBar.visibility = if (busy) View.VISIBLE else View.GONE
         if (busy) {
             val status = if (page == Page.ACCOUNTS) binding.accounts.tvAccountStatus else binding.tvStatus

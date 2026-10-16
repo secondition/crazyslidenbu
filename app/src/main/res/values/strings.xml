@@ -54,4 +54,17 @@
     <string name="zxing_app_name">扫一扫</string>
     <string name="zxing_button_ok">确定</string>
     <string name="zxing_msg_camera_framework_bug">无法打开相机</string>
+    <string name="select_account">选择账户</string>
+    <string name="select_named_account">选择账户 %1$s</string>
+    <string name="group_login">组登录</string>
+    <string name="group_login_count">组登录（%1$d 个账户）</string>
+    <string name="group_member_count">%1$d 个账户</string>
+    <string name="group_authenticating">正在登录 %1$s（%2$d/%3$d）…</string>
+    <string name="group_login_required">请先完成账户登录</string>
+    <string name="loading_courses">正在获取课程列表…</string>
+    <string name="no_signable_members">本组暂无可签到的账户</string>
+    <string name="sign_code_required">请输入4位数字签到码</string>
+    <string name="group_signing">正在为 %1$s 签到（%2$d/%3$d）…</string>
+    <string name="no_matching_course">无此课程</string>
+    <string name="sign_failed">失败：%1$s</string>
 </resources>

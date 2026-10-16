@@ -7,6 +7,13 @@
     android:gravity="center_vertical"
     android:background="?attr/selectableItemBackground">
 
+    <CheckBox
+        android:id="@+id/selectAccount"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:contentDescription="@string/select_account"
+        android:buttonTint="@color/brand_primary"/>
+
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"

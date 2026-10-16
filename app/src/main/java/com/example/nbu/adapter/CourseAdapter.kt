@@ -13,23 +13,30 @@ import android.widget.Toast
 import androidx.core.graphics.toColorInt
 import androidx.recyclerview.widget.RecyclerView
 import com.example.nbu.R
-import com.example.nbu.model.Course
+import com.example.nbu.model.GroupCourse
 
 /**
  * 课程列表适配器
  */
 class CourseAdapter(
-    private val onSignClick: (Course, String?) -> Unit
+    private val names: Map<String, String>,
+    private val onSignClick: (GroupCourse, String?) -> Unit
 ) : RecyclerView.Adapter<CourseAdapter.CourseViewHolder>() {
 
-    private val courses = mutableListOf<Course>()
+    private val courses = mutableListOf<GroupCourse>()
     private val expandedPositions = mutableSetOf<Int>()
+    private var busy = false
 
-    fun setCourses(newCourses: List<Course>) {
+    fun setCourses(newCourses: List<GroupCourse>) {
         courses.clear()
         courses.addAll(newCourses)
         expandedPositions.clear()
         notifyDataSetChanged()
+    }
+
+    fun setBusy(value: Boolean) {
+        busy = value
+        notifyItemRangeChanged(0, courses.size)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): CourseViewHolder {
@@ -50,12 +57,20 @@ class CourseAdapter(
         private val tvTime: TextView = itemView.findViewById(R.id.tvTime)
         private val tvClassroom: TextView = itemView.findViewById(R.id.tvClassroom)
         private val tvTeacher: TextView = itemView.findViewById(R.id.tvTeacher)
+        private val tvMembers: TextView = itemView.findViewById(R.id.tvMembers)
         private val signArea: View = itemView.findViewById(R.id.signArea)
         private val etCode: EditText = itemView.findViewById(R.id.etCode)
         
         private var textWatcher: TextWatcher? = null
 
-        fun bind(course: Course) {
+        fun bind(group: GroupCourse) {
+            val course = group.course
+            etCode.isEnabled = !busy
+            itemView.isEnabled = !busy
+            tvMembers.visibility = if (names.size > 1) View.VISIBLE else View.GONE
+            tvMembers.text = group.courses.entries.joinToString("\n") { (username, memberCourse) ->
+                "${names[username]}：${memberCourse.statusLabel}"
+            }
             tvCourseName.text = course.displayName
             tvTime.text = "${course.startTime} ~ ${course.endTime}"
             
@@ -81,22 +96,22 @@ class CourseAdapter(
             val iconTint: Int
 
             when {
-                !course.isSignOpen -> {
+                !group.isSignOpen -> {
                     // 未开放签到（老师未开启签到）
                     iconRes = R.drawable.ic_status_lock
                     iconTint = Color.GRAY
                 }
-                course.attendanceState == 1 -> {
+                group.attendanceState == 1 -> {
                     // 已签到
                     iconRes = R.drawable.ic_status_check
                     iconTint = "#4CAF50".toColorInt() // Green
                 }
-                course.attendanceState == 2 -> {
+                group.attendanceState == 2 -> {
                     // 迟到
                     iconRes = R.drawable.ic_status_late
                     iconTint = "#FF9800".toColorInt() // Orange
                 }
-                course.attendanceState == 3 -> {
+                group.attendanceState == 3 -> {
                     // 请假
                     iconRes = R.drawable.ic_status_leave
                     iconTint = "#2196F3".toColorInt() // Blue
@@ -113,7 +128,7 @@ class CourseAdapter(
 
             // 签到区域显示逻辑：课程可签到且处于展开状态时显示
             val isExpanded = expandedPositions.contains(adapterPosition)
-            if (course.isSignable && isExpanded) {
+            if (group.isSignable && isExpanded) {
                 signArea.visibility = View.VISIBLE
             } else {
                 signArea.visibility = View.GONE
@@ -130,7 +145,7 @@ class CourseAdapter(
                     if (s != null && s.length == 4) {
                         val code = s.toString()
                         // 自动签到
-                        onSignClick(course, code)
+                        onSignClick(group, code)
                         // 清空输入框
                         etCode.setText("")
                     }
@@ -140,7 +155,7 @@ class CourseAdapter(
             
             // 点击整个卡片切换展开状态
             itemView.setOnClickListener {
-                if (course.isSignable) {
+                if (group.isSignable) {
                     if (expandedPositions.contains(adapterPosition)) {
                         expandedPositions.remove(adapterPosition)
                     } else {
@@ -149,9 +164,9 @@ class CourseAdapter(
                     notifyItemChanged(adapterPosition)
                 } else {
                     // 不可签到时显示原因
-                    course.unsignableReason?.let { reason ->
-                        Toast.makeText(itemView.context, reason, Toast.LENGTH_SHORT).show()
-                    }
+                    val reason = if (names.size == 1) course.unsignableReason
+                        else itemView.context.getString(R.string.no_signable_members)
+                    reason?.let { Toast.makeText(itemView.context, it, Toast.LENGTH_SHORT).show() }
                 }
             }
         }
