@@ -20,7 +20,7 @@
     <string name="logged_in">✓ 登录成功</string>
     <string name="log_in">登录</string>
     <string name="login_failed">登录失败</string>
-    <string name="version_label" translatable="false">v1.3</string>
+    <string name="version_label" translatable="false">v2.0</string>
     <string name="device_permission">自动识别设备标识需要照片访问权限，请允许访问所有照片。</string>
     <string name="device_detected">设备标识已准备，请填写本机账号密码。</string>
     <string name="account_management">账户管理</string>
