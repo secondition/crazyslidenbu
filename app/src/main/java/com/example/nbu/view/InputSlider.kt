@@ -10,10 +10,16 @@ import androidx.appcompat.widget.AppCompatImageView
 class InputSlider(context: Context, attrs: AttributeSet?) : AppCompatImageView(context, attrs) {
     var onClear: (() -> Unit)? = null
     var onRoundTrip: (() -> Unit)? = null
+    var onHoldRight: (() -> Unit)? = null
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private var start = 0f
     private var reachedRight = false
     private var moved = false
+    private var waiting = false
+    private val holdRight = Runnable {
+        waiting = false
+        onHoldRight?.invoke()
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isEnabled) return false
@@ -30,15 +36,25 @@ class InputSlider(context: Context, attrs: AttributeSet?) : AppCompatImageView(c
                 if (distance <= 0f) return true
                 translationX = (event.rawX - start).coerceIn(0f, distance)
                 moved = moved || translationX > slop
-                if (translationX >= distance - slop && !reachedRight) {
+                val atRight = translationX >= distance - slop
+                if (atRight && !reachedRight) {
                     reachedRight = true
                     onClear?.invoke()
                 } else if (reachedRight && translationX <= slop) {
                     reachedRight = false
                     onRoundTrip?.invoke()
                 }
+                if (atRight && !waiting) {
+                    waiting = true
+                    postDelayed(holdRight, HOLD_DURATION)
+                } else if (!atRight && waiting) {
+                    waiting = false
+                    removeCallbacks(holdRight)
+                }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                waiting = false
+                removeCallbacks(holdRight)
                 parent.requestDisallowInterceptTouchEvent(false)
                 animate().translationX(0f).setDuration(180).start()
                 if (!moved && event.actionMasked == MotionEvent.ACTION_UP) performClick()
@@ -54,8 +70,14 @@ class InputSlider(context: Context, attrs: AttributeSet?) : AppCompatImageView(c
     }
 
     override fun onDetachedFromWindow() {
+        waiting = false
+        removeCallbacks(holdRight)
         animate().cancel()
         translationX = 0f
         super.onDetachedFromWindow()
+    }
+
+    private companion object {
+        const val HOLD_DURATION = 3_000L
     }
 }

@@ -1,12 +1,18 @@
 package com.example.nbu
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Rect
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -38,14 +44,23 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.sqrt
 
 /**
  * 登录界面
  */
 class LoginActivity : AppCompatActivity() {
     private enum class Page { LOGIN, ACCOUNTS, EDITOR, SHARE, REMOVE }
+
+    private companion object {
+        const val CAMPUS_PACKAGE = "com.wisedu.cpdaily.nbu"
+        const val AD_SECONDS = 3
+        const val SHAKE_FORCE = 15f
+        const val SHAKE_INTERVAL = 1_000L
+    }
 
     private lateinit var binding: ActivityLoginBinding
     private lateinit var userManager: UserManager
@@ -55,6 +70,7 @@ class LoginActivity : AppCompatActivity() {
     private var roundTrips = 0
     private var validation: Job? = null
     private var authentication: Job? = null
+    private var adCountdown: Job? = null
     private val selectedAccounts = linkedSetOf<String>()
 
     private val signActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
@@ -123,6 +139,7 @@ class LoginActivity : AppCompatActivity() {
                 else -> showAccounts()
             }
         }
+        if (savedInstanceState == null && userManager.isSplashAdEnabled()) showSplashAd()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -151,6 +168,11 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         binding.passwordSlider.onClear = { binding.etPassword.text?.clear() }
+        binding.passwordSlider.onHoldRight = {
+            val enabled = !userManager.isSplashAdEnabled()
+            userManager.setSplashAdEnabled(enabled)
+            Toast.makeText(this, if (enabled) R.string.ad_enabled else R.string.ad_disabled, Toast.LENGTH_SHORT).show()
+        }
         alignSlider(binding.tilUsername, binding.usernameSlider)
         alignSlider(binding.tilPassword, binding.passwordSlider)
         binding.btnLogin.setOnClickListener {
@@ -264,6 +286,54 @@ class LoginActivity : AppCompatActivity() {
             visibility = if (selectedAccounts.size >= 2) View.VISIBLE else View.GONE
             text = getString(R.string.group_login_count, selectedAccounts.size)
         }
+    }
+
+    private fun showSplashAd() {
+        binding.adScreen.visibility = View.VISIBLE
+        binding.btnSkipAd.setOnClickListener { dismissSplashAd() }
+        getSystemService(SensorManager::class.java)?.let { sensors ->
+            sensors.registerListener(shakeListener, sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_GAME)
+        }
+        adCountdown = lifecycleScope.launch {
+            for (remaining in AD_SECONDS downTo 1) {
+                binding.btnSkipAd.text = getString(R.string.ad_skip, remaining)
+                delay(1000)
+            }
+            dismissSplashAd()
+        }
+    }
+
+    private fun dismissSplashAd() {
+        adCountdown?.cancel()
+        adCountdown = null
+        getSystemService(SensorManager::class.java)?.unregisterListener(shakeListener)
+        binding.adScreen.visibility = View.GONE
+    }
+
+    private fun openCampusApp() {
+        val intent = packageManager.getLaunchIntentForPackage(CAMPUS_PACKAGE)
+        try {
+            if (intent == null) throw ActivityNotFoundException()
+            dismissSplashAd()
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.ad_missing, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val shakeListener = object : SensorEventListener {
+        private var lastShake = 0L
+
+        override fun onSensorChanged(event: SensorEvent) {
+            val (x, y, z) = event.values
+            if (sqrt(x * x + y * y + z * z) < SHAKE_FORCE) return
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastShake < SHAKE_INTERVAL) return
+            lastShake = now
+            openCampusApp()
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
     }
 
     private fun showEditor(user: User?) {

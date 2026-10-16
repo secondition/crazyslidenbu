@@ -73,4 +73,9 @@
     <string name="activity_no_result">活动页面未返回签到结果</string>
     <string name="activity_interrupted">操作中断，结果待确认</string>
     <string name="group_activity_complete">本组活动操作已处理，详情见各账户结果</string>
+    <string name="ad_skip">跳过 %1$d</string>
+    <string name="ad_hint">摇一摇打开风华宁大</string>
+    <string name="ad_enabled">开屏跳转已开启</string>
+    <string name="ad_disabled">开屏跳转已关闭</string>
+    <string name="ad_missing">未安装风华宁大</string>
 </resources>

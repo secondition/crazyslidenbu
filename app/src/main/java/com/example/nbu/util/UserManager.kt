@@ -32,6 +32,7 @@ class UserManager(context: Context) {
         private const val KEY_PREFIX_SAVE_TIME = "save_time_"
         private const val KEY_LAST_USERNAME = "last_username"
         private const val KEY_LAST_PASSWORD = "last_password"
+        private const val KEY_SPLASH_AD = "splash_ad"
         
         private const val KEY_PREFIX_BROWSER = "browser_"
         private const val KEY_PREFIX_PLATFORM = "platform_"
@@ -228,6 +229,14 @@ class UserManager(context: Context) {
         }
     }
     
+    // ==================== 开屏跳转 ====================
+
+    fun isSplashAdEnabled(): Boolean = prefs.getBoolean(KEY_SPLASH_AD, false)
+
+    fun setSplashAdEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_SPLASH_AD, enabled) }
+    }
+
     /**
      * 获取最后登录的账号密码
      */
