@@ -282,13 +282,14 @@ class LoginActivity : AppCompatActivity() {
 
     private fun showSplashAd() {
         binding.adScreen.visibility = View.VISIBLE
-        binding.btnSkipAd.setOnClickListener { dismissSplashAd() }
+        binding.adScreen.setOnClickListener { openCampusApp() }
+        binding.btnOpenCampus.setOnClickListener { openCampusApp() }
         getSystemService(SensorManager::class.java)?.let { sensors ->
             sensors.registerListener(shakeListener, sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_GAME)
         }
         adCountdown = lifecycleScope.launch {
             for (remaining in AD_SECONDS downTo 1) {
-                binding.btnSkipAd.text = getString(R.string.ad_skip, remaining)
+                binding.btnOpenCampus.text = getString(R.string.ad_open, remaining)
                 delay(1000)
             }
             dismissSplashAd()
