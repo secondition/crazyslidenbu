@@ -63,6 +63,12 @@ class UserManager(context: Context) {
         val existingIndex = users.indexOfFirst { it.username == user.username }
         
         if (existingIndex >= 0) {
+            if (users[existingIndex].deviceId != user.deviceId) {
+                clearPlatformSession(user.username)
+                saveCookies(user.username, getCookies(user.username).filterNot {
+                    it.name in setOf("sessionToken", "MOD_AUTH_CAS")
+                })
+            }
             users[existingIndex] = user
         } else {
             users.add(user)
@@ -115,7 +121,7 @@ class UserManager(context: Context) {
 
     fun getLocalDeviceId(): String? = prefs.getString(KEY_DEVICE_ID, null)
 
-    fun getDeviceId(username: String): String? = getUser(username)?.deviceId ?: getLocalDeviceId()
+    fun getDeviceId(username: String): String? = getUser(username)?.deviceId
 
     fun readDeviceId(): String? {
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)

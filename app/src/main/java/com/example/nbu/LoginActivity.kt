@@ -33,6 +33,7 @@ import com.example.nbu.util.UserManager
 import com.example.nbu.util.requestVerificationCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -58,7 +59,7 @@ class LoginActivity : AppCompatActivity() {
             return@registerForActivityResult
         }
         val existing = userManager.getUser(received.username)
-        if (existing != null && (existing.password != received.password || existing.deviceId != received.deviceId)) {
+        if (existing != null && existing.password != received.password) {
             userManager.clearAuthentication(received.username)
         }
         val user = received.copy(remark = existing?.remark.orEmpty())
@@ -79,7 +80,6 @@ class LoginActivity : AppCompatActivity() {
         } else {
             setLoadingState(false)
             showError(getString(R.string.device_permission))
-            if (userManager.getAllUsers().isEmpty()) showUserManagementDialog()
         }
     }
 
@@ -95,11 +95,6 @@ class LoginActivity : AppCompatActivity() {
         
         setupViews()
         loadLastLogin()
-        val users = userManager.getAllUsers()
-        if (savedInstanceState == null && userManager.getLocalDeviceId() == null &&
-            (users.isEmpty() || users.any { it.deviceId == null })) {
-            requestDeviceAccess()
-        }
     }
 
     private fun requestDeviceAccess() {
@@ -120,8 +115,12 @@ class LoginActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val deviceId = withContext(Dispatchers.IO) { userManager.readDeviceId() }
-                binding.tvStatus.setText(if (deviceId == null) R.string.device_missing else R.string.device_detected)
-                if (deviceId == null && userManager.getAllUsers().isEmpty()) showUserManagementDialog()
+                if (deviceId == null) {
+                    showError(getString(R.string.device_missing))
+                } else {
+                    binding.tvStatus.visibility = View.GONE
+                    showAccountDialog()
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -152,58 +151,80 @@ class LoginActivity : AppCompatActivity() {
     }
     
     /**
-     * 显示编辑用户对话框
+     * 显示账户资料对话框
      */
-    private fun showEditUserDialog(existingUser: User) {
-        val dialogBinding = DialogAddUserBinding.inflate(LayoutInflater.from(this))
-        
-        dialogBinding.etUsername.setText(existingUser.username)
-        dialogBinding.etPassword.setText(existingUser.password)
-        dialogBinding.etRemark.setText(existingUser.remark)
-        dialogBinding.etUsername.isEnabled = false
-        
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setView(dialogBinding.root)
-            .create()
-        
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        
-        dialogBinding.btnCancel.setOnClickListener {
-            dialog.dismiss()
+    private fun showAccountDialog(existingUser: User? = null) {
+        val dialogBinding = DialogAddUserBinding.inflate(layoutInflater)
+        val adding = existingUser == null
+        if (existingUser != null) {
+            dialogBinding.etUsername.setText(existingUser.username)
+            dialogBinding.etPassword.setText(existingUser.password)
+            dialogBinding.etRemark.setText(existingUser.remark)
+            dialogBinding.etUsername.isEnabled = false
+        } else {
+            dialogBinding.tvDialogTitle.setText(R.string.add_local_account)
+            dialogBinding.btnSave.setText(R.string.add_local_account)
+            dialogBinding.tvStatus.setText(R.string.device_detected)
+            dialogBinding.tvStatus.visibility = View.VISIBLE
         }
-        
+
+        val dialog = MaterialAlertDialogBuilder(this).setView(dialogBinding.root).create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        var validation: Job? = null
+        dialog.setOnDismissListener { validation?.cancel() }
+        dialogBinding.btnCancel.setOnClickListener { dialog.dismiss() }
         dialogBinding.btnSave.setOnClickListener {
-            val username = dialogBinding.etUsername.text?.toString()?.trim() ?: ""
-            val password = dialogBinding.etPassword.text?.toString() ?: ""
-            val remark = dialogBinding.etRemark.text?.toString()?.trim() ?: ""
-            
+            val username = dialogBinding.etUsername.text?.toString()?.trim().orEmpty()
+            val password = dialogBinding.etPassword.text?.toString().orEmpty()
+            val remark = dialogBinding.etRemark.text?.toString()?.trim().orEmpty()
             if (username.isEmpty()) {
                 dialogBinding.tilUsername.error = "请输入学号"
                 return@setOnClickListener
-            } else {
-                dialogBinding.tilUsername.error = null
             }
-            
+            dialogBinding.tilUsername.error = null
             if (password.isEmpty()) {
                 dialogBinding.tilPassword.error = "请输入密码"
                 return@setOnClickListener
-            } else {
-                dialogBinding.tilPassword.error = null
             }
-            
-            val user = existingUser.copy(password = password, remark = remark)
-            if (existingUser.password != password) userManager.clearAuthentication(username)
-            userManager.saveUser(user)
-            
-            Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
-            
-            // 自动填充到输入框
-            binding.etUsername.setText(username)
-            binding.etPassword.setText(password)
-            
-            dialog.dismiss()
+            dialogBinding.tilPassword.error = null
+            val user = existingUser?.copy(password = password, remark = remark)
+                ?: User(username, password, remark, requireNotNull(userManager.getLocalDeviceId()), local = true)
+            dialogBinding.btnSave.isEnabled = false
+            dialogBinding.etUsername.isEnabled = false
+            dialogBinding.etPassword.isEnabled = false
+            dialogBinding.etRemark.isEnabled = false
+            dialogBinding.tvStatus.visibility = View.GONE
+            if (adding) dialogBinding.btnSave.setText(R.string.verifying_account)
+            validation = lifecycleScope.launch {
+                try {
+                    if (adding) {
+                        NbuApiService(username, userManager).login(password, ::requestVerificationCode).getOrThrow()
+                    } else if (existingUser?.password != password) {
+                        userManager.clearAuthentication(username)
+                    }
+                    userManager.saveUser(user)
+                    if (!adding) {
+                        binding.etUsername.setText(username)
+                        binding.etPassword.setText(password)
+                    }
+                    validation = null
+                    dialog.dismiss()
+                    showUserManagementDialog()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    dialogBinding.tvStatus.text = e.message ?: getString(R.string.account_failed)
+                    dialogBinding.tvStatus.setTextColor(getColor(R.color.status_error))
+                    dialogBinding.tvStatus.visibility = View.VISIBLE
+                } finally {
+                    dialogBinding.btnSave.isEnabled = true
+                    dialogBinding.etUsername.isEnabled = adding
+                    dialogBinding.etPassword.isEnabled = true
+                    dialogBinding.etRemark.isEnabled = true
+                    dialogBinding.btnSave.setText(if (adding) R.string.add_local_account else R.string.save)
+                }
+            }
         }
-        
         dialog.show()
     }
     
@@ -253,7 +274,7 @@ class LoginActivity : AppCompatActivity() {
                 btnShare.setOnClickListener { showAccountCode(user) }
 
                 btnEdit.setOnClickListener {
-                    showEditUserDialog(user)
+                    showAccountDialog(user)
                     dialog.dismiss()
                 }
                 
@@ -284,6 +305,11 @@ class LoginActivity : AppCompatActivity() {
         
         refreshList()
         
+        dialogBinding.btnAddLocal.setOnClickListener {
+            dialog.dismiss()
+            if (userManager.getLocalDeviceId() != null) showAccountDialog() else requestDeviceAccess()
+        }
+
         dialogBinding.btnAddUser.setOnClickListener {
             dialog.dismiss()
             accountScanner.launch(ScanOptions()
@@ -302,7 +328,7 @@ class LoginActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun showAccountCode(user: User, onClose: (() -> Unit)? = null) {
+    private fun showAccountCode(user: User) {
         if (!user.local || user.deviceId != userManager.getLocalDeviceId() ||
             userManager.getCachedSession(user.username) == null) return
         val dialogBinding = DialogAccountCodeBinding.inflate(layoutInflater)
@@ -311,9 +337,7 @@ class LoginActivity : AppCompatActivity() {
         dialogBinding.ivCode.setImageBitmap(BarcodeEncoder().encodeBitmap(code, BarcodeFormat.QR_CODE, 768, 768))
         val dialog = MaterialAlertDialogBuilder(this).setView(dialogBinding.root).create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        if (onClose != null) dialogBinding.btnClose.setText(R.string.start_sign)
         dialogBinding.btnClose.setOnClickListener { dialog.dismiss() }
-        dialog.setOnDismissListener { onClose?.invoke() }
         dialog.show()
     }
 
@@ -343,19 +367,12 @@ class LoginActivity : AppCompatActivity() {
                 val existingUser = userManager.getUser(username)
                 val apiService = NbuApiService(username, userManager)
                 val session = apiService.login(password, ::requestVerificationCode).getOrThrow()
-                val deviceId = userManager.getDeviceId(username)
-                val user = User(username, password, existingUser?.remark.orEmpty(), deviceId,
-                    local = deviceId != null && deviceId == userManager.getLocalDeviceId() &&
-                        (existingUser == null || existingUser.local || existingUser.deviceId == null))
+                val user = existingUser?.copy(password = password) ?: User(username, password)
                 userManager.saveUser(user)
                 userManager.saveLastLogin(username, password)
                 binding.tvStatus.visibility = View.GONE
                 Toast.makeText(this@LoginActivity, "✓ 登录成功", Toast.LENGTH_SHORT).show()
-                if (user.local && existingUser?.local != true) {
-                    showAccountCode(user) { navigateToSignActivity(session, username) }
-                } else {
-                    navigateToSignActivity(session, username)
-                }
+                navigateToSignActivity(session, username)
             } catch (e: CancellationException) {
                 binding.tvStatus.visibility = View.GONE
                 throw e
