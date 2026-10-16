@@ -28,7 +28,10 @@
     <string name="activity_scan">活动扫码</string>
     <string name="scan">扫一扫</string>
     <string name="scan_prompt">将活动二维码放入框内</string>
-    <string name="activity_submitting">正在提交活动签到…</string>
+    <string name="activity_authorizing">正在授权活动页面…</string>
+    <string name="activity_page_failed">活动页面加载失败</string>
+    <string name="activity_http_error">活动页面加载失败（HTTP %1$d）</string>
+    <string name="activity_cookie_failed">活动登录状态同步失败</string>
     <string name="activity_failed">操作未完成</string>
     <string name="activity_auth_required">尚未取得有效的活动授权</string>
     <string name="torch_on">打开补光</string>

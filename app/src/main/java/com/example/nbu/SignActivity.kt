@@ -18,9 +18,6 @@ import com.example.nbu.network.NbuApiService
 import com.example.nbu.network.SessionExpiredException
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
-import com.example.nbu.util.requestVerificationCode
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.snackbar.Snackbar
 import com.google.zxing.client.android.Intents
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -35,8 +32,6 @@ class SignActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_JSESSION_ID = "jsession_id"
         const val EXTRA_USERNAME = "username"
-        private const val KEY_ACTIVITY_MESSAGE = "activity_message"
-        private const val KEY_ACTIVITY_SUCCESS = "activity_success"
     }
 
     private lateinit var binding: ActivitySignBinding
@@ -48,7 +43,6 @@ class SignActivity : AppCompatActivity() {
     private var username: String = ""
     private var courseJob: Job? = null
     private lateinit var scan: MenuItem
-    private var activityResult: Pair<Boolean, String>? = null
 
     private val scanner = registerForActivityResult(ScanContract()) { result ->
         scan.isEnabled = true
@@ -56,10 +50,12 @@ class SignActivity : AppCompatActivity() {
         val code = try {
             ActivityCode.parse(value)
         } catch (e: IllegalArgumentException) {
-            showActivityResult(false, e.message ?: getString(R.string.activity_failed))
+            Toast.makeText(this, e.message ?: getString(R.string.activity_failed), Toast.LENGTH_LONG).show()
             return@registerForActivityResult
         }
-        performActivitySign(code)
+        startActivity(Intent(this, WebActivity::class.java)
+            .putExtra(WebActivity.EXTRA_USERNAME, username)
+            .putExtra(WebActivity.EXTRA_URL, code.url))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,18 +78,7 @@ class SignActivity : AppCompatActivity() {
         }
 
         setupViews()
-        savedInstanceState?.getString(KEY_ACTIVITY_MESSAGE)?.let {
-            showActivityResult(savedInstanceState.getBoolean(KEY_ACTIVITY_SUCCESS), it)
-        }
         loadCourses()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        activityResult?.let { (success, message) ->
-            outState.putBoolean(KEY_ACTIVITY_SUCCESS, success)
-            outState.putString(KEY_ACTIVITY_MESSAGE, message)
-        }
     }
 
     private fun navigateToLogin() {
@@ -225,40 +210,6 @@ class SignActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    private fun performActivitySign(code: ActivityCode) {
-        activityResult = null
-        scan.isEnabled = false
-        val progress = Snackbar.make(binding.root, R.string.activity_submitting, Snackbar.LENGTH_INDEFINITE)
-        progress.show()
-        lifecycleScope.launch {
-            try {
-                apiService.signActivity(code, ::requestVerificationCode).onSuccess {
-                    showActivityResult(true, it)
-                }.onFailure {
-                    showActivityResult(false, if (it is SessionExpiredException) {
-                        getString(R.string.activity_auth_required)
-                    } else {
-                        it.message ?: getString(R.string.activity_failed)
-                    })
-                }
-            } finally {
-                progress.dismiss()
-                scan.isEnabled = true
-            }
-        }
-    }
-
-    private fun showActivityResult(success: Boolean, message: String) {
-        activityResult = success to message
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.activity_title)
-            .setMessage(message)
-            .setIcon(if (success) R.drawable.ic_status_check else R.drawable.ic_status_close)
-            .setPositiveButton(R.string.close, null)
-            .setOnDismissListener { activityResult = null }
-            .show()
     }
 
     private fun setLoadingState(isLoading: Boolean, message: String = "") {

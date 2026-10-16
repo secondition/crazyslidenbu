@@ -15,6 +15,7 @@ class ActivityCodeTest {
         assertEquals("12", sign.taskWid)
         assertEquals("34", sign.wid)
         assertTrue(sign.isSignin)
+        assertEquals(link, sign.url)
         val clockin = ActivityCode.parse(link.replace("toolCode=1", "toolCode=9").replace("signType=in", "signType=out"))
         assertEquals("9", clockin.toolCode)
         assertFalse(clockin.isSignin)

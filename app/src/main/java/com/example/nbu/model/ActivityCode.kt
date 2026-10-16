@@ -8,7 +8,8 @@ data class ActivityCode(
     val taskWid: String,
     val wid: String,
     val toolCode: String,
-    val signType: String
+    val signType: String,
+    val url: String
 ) {
     val isSignin: Boolean get() = signType == "in"
 
@@ -32,7 +33,7 @@ data class ActivityCode(
             fun required(name: String): String = requireNotNull(params.queryParameterValues(name).lastOrNull()?.takeIf { it.isNotBlank() }) {
                 "二维码缺少 $name"
             }
-            val code = ActivityCode(required("uuid"), required("taskWid"), required("wid"), required("toolCode"), required("signType"))
+            val code = ActivityCode(required("uuid"), required("taskWid"), required("wid"), required("toolCode"), required("signType"), url.toString())
             require(code.toolCode in listOf("1", "9")) { "此二维码不属于活动签到或打卡" }
             require(code.signType in listOf("in", "out")) { "二维码签到方式无效" }
             return code
