@@ -135,7 +135,7 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         binding.passwordSlider.onClear = { binding.etPassword.text?.clear() }
-        binding.lampCord.setOnClickListener { AppTheme.toggle(this) }
+        binding.lampCord.setOnClickListener { cycleTheme() }
         binding.btnLogin.setOnClickListener {
             hideKeyboard()
             performLogin()
@@ -338,6 +338,17 @@ class LoginActivity : AppCompatActivity() {
                 setLoadingState(false)
             }
         }
+    }
+
+    private fun cycleTheme() {
+        val modes = AppTheme.Mode.entries
+        val next = modes[(modes.indexOf(AppTheme.mode(this)) + 1) % modes.size]
+        AppTheme.setMode(this, next)
+        Toast.makeText(this, getString(when (next) {
+            AppTheme.Mode.LIGHT -> R.string.theme_light
+            AppTheme.Mode.DARK -> R.string.theme_dark
+            AppTheme.Mode.SYSTEM -> R.string.theme_system
+        }), Toast.LENGTH_SHORT).show()
     }
 
     private fun performLogin() {

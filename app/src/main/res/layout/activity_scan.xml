@@ -12,7 +12,6 @@
         android:minHeight="?attr/actionBarSize"
         android:fitsSystemWindows="true"
         android:background="@color/brand_primary"
-        android:theme="@style/ThemeOverlay.MaterialComponents.Dark.ActionBar"
         app:title="@string/scan"
         app:titleTextColor="@color/on_primary"
         app:navigationIcon="@drawable/ic_arrow_back"
