@@ -11,6 +11,7 @@ import com.example.nbu.util.AccountCode
 import com.example.nbu.util.UserManager
 import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -78,5 +79,38 @@ class BrowserProfileTest {
         val bound = ordinary.copy(deviceId = UUID.randomUUID().toString(), local = true)
         manager.saveUser(bound)
         assertEquals(bound, restored.getUser(bound.username))
+    }
+
+    @Test
+    fun updatesKeepBoundAccounts() {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val manager = UserManager(context)
+        val bound = User(UUID.randomUUID().toString(), "bound", deviceId = UUID.randomUUID().toString(), local = true)
+        val unbound = User(UUID.randomUUID().toString(), "unbound")
+        for (user in listOf(bound, unbound)) {
+            manager.saveUser(user)
+            manager.saveSession(user.username, "course")
+            manager.getBrowserProfile(user.username)
+            manager.getDeviceProfile(user.username)
+            manager.saveCookies(user.username, emptyList())
+        }
+        val browser = manager.getBrowserProfile(bound.username)
+        val prefs = context.getSharedPreferences("nbu_users", Context.MODE_PRIVATE)
+        prefs.edit { putString("device_id", bound.deviceId) }
+        manager.saveLastLogin(unbound.username, unbound.password)
+
+        manager.removeUnboundAccounts()
+
+        val restored = UserManager(context)
+        assertEquals(bound, restored.getUser(bound.username))
+        assertEquals("course", restored.getCachedSession(bound.username))
+        assertEquals(browser, restored.getBrowserProfile(bound.username))
+        assertEquals(bound.deviceId, restored.getLocalDeviceId())
+        assertNull(restored.getUser(unbound.username))
+        assertNull(restored.getCachedSession(unbound.username))
+        assertNull(restored.getLastLogin())
+        for (prefix in listOf("browser_", "device_", "cookies_")) {
+            assertFalse(prefs.contains(prefix + unbound.username))
+        }
     }
 }

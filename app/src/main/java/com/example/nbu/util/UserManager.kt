@@ -92,6 +92,22 @@ class UserManager(context: Context) {
         prefs.edit { remove(KEY_PREFIX_COOKIES + username) }
     }
     
+    fun removeUnboundAccounts() {
+        val users = getAllUsers()
+        val unbound = users.filter { it.deviceId.isNullOrBlank() }.map { it.username }.toSet()
+        if (unbound.isEmpty()) return
+        val prefixes = listOf(KEY_PREFIX_JSESSIONID, KEY_PREFIX_SAVE_TIME, KEY_PREFIX_COOKIES,
+            KEY_PREFIX_BROWSER, KEY_PREFIX_DEVICE)
+        prefs.edit {
+            putString(KEY_USERS, gson.toJson(users.filterNot { it.username in unbound }))
+            for (username in unbound) for (prefix in prefixes) remove(prefix + username)
+            if (prefs.getString(KEY_LAST_USERNAME, null) in unbound) {
+                remove(KEY_LAST_USERNAME)
+                remove(KEY_LAST_PASSWORD)
+            }
+        }
+    }
+
     /**
      * 根据用户名获取用户
      */
