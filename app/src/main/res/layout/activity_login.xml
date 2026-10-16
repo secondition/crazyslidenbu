@@ -18,6 +18,16 @@
             android:background="@color/brand_primary"
             app:layout_constraintTop_toTopOf="parent"/>
 
+        <com.example.nbu.view.LampCord
+            android:id="@+id/lampCord"
+            android:layout_width="48dp"
+            android:layout_height="140dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="32dp"
+            android:contentDescription="@string/toggle_theme"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"/>
+
         <TextView
             android:id="@+id/tvTitle"
             style="@style/LoginTitle"
@@ -37,7 +47,7 @@
             android:textSize="16sp"
             android:textStyle="italic"
             android:fontFamily="serif"
-            android:textColor="#CCFFFFFF"
+            android:textColor="@color/on_primary"
             android:layout_marginTop="8dp"
             app:layout_constraintTop_toBottomOf="@id/tvTitle"
             app:layout_constraintStart_toStartOf="parent"
@@ -53,7 +63,7 @@
             android:layout_marginBottom="32dp"
             app:cardCornerRadius="16dp"
             app:cardElevation="8dp"
-            app:cardBackgroundColor="@android:color/white"
+            app:cardBackgroundColor="@color/surface"
             app:layout_constraintTop_toBottomOf="@id/tvSubtitle"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"

@@ -21,6 +21,7 @@ import com.example.nbu.databinding.ActivityLoginBinding
 import com.example.nbu.model.User
 import com.example.nbu.network.NbuApiService
 import com.example.nbu.util.AccountCode
+import com.example.nbu.util.AppTheme
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
 import com.example.nbu.util.requestVerificationCode
@@ -134,6 +135,7 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         binding.passwordSlider.onClear = { binding.etPassword.text?.clear() }
+        binding.lampCord.setOnClickListener { AppTheme.toggle(this) }
         binding.btnLogin.setOnClickListener {
             hideKeyboard()
             performLogin()

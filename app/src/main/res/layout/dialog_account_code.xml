@@ -28,6 +28,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:adjustViewBounds="true"
+        android:background="@android:color/white"
         android:contentDescription="@string/account_code"/>
 
     <com.google.android.material.button.MaterialButton

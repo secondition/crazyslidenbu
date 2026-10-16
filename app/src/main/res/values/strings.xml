@@ -19,6 +19,8 @@
     <string name="device_read_failed">读取共享设备标识失败</string>
     <string name="logging_in">正在登录…</string>
     <string name="logged_in">✓ 登录成功</string>
+    <string name="log_in">登录</string>
+    <string name="toggle_theme">切换明暗主题</string>
     <string name="login_failed">登录失败</string>
     <string name="disclaimer">仅供快捷签到与学习，使用责任自负。</string>
     <string name="device_permission">自动识别设备标识需要照片访问权限，请允许访问所有照片。</string>

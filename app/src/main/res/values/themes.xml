@@ -4,11 +4,11 @@
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorPrimaryVariant">@color/brand_primary_dark</item>
-        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
         <!-- Secondary brand color. -->
         <item name="colorSecondary">@color/brand_accent</item>
         <item name="colorSecondaryVariant">@color/brand_primary</item>
-        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorOnSecondary">@color/on_primary</item>
         <!-- Status bar color. -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
@@ -26,18 +26,11 @@
         <item name="android:textSize">48sp</item>
         <item name="android:textStyle">italic</item>
         <item name="android:fontFamily">sans-serif-black</item>
-        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textColor">@color/on_primary</item>
         <item name="android:shadowColor">#40000000</item>
         <item name="android:shadowDx">4</item>
         <item name="android:shadowDy">4</item>
         <item name="android:shadowRadius">8</item>
     </style>
 
-    <!-- 透明背景对话框样式 -->
-    <style name="TransparentDialog" parent="Theme.MaterialComponents.Light.Dialog">
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:windowIsFloating">true</item>
-        <item name="android:windowNoTitle">true</item>
-    </style>
 </resources>

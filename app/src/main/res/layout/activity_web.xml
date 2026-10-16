@@ -14,9 +14,9 @@
         android:fitsSystemWindows="true"
         android:background="@color/brand_primary"
         app:title="@string/activity_title"
-        app:titleTextColor="@android:color/white"
+        app:titleTextColor="@color/on_primary"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@android:color/white"/>
+        app:navigationIconTint="@color/on_primary"/>
 
     <FrameLayout
         android:layout_width="match_parent"

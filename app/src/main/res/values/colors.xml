@@ -5,6 +5,8 @@
     
     <!-- Brand Colors -->
     <color name="brand_primary">#1976D2</color>
+    <color name="on_primary">#FFFFFFFF</color>
+    <color name="surface">#FFFFFFFF</color>
     <color name="brand_primary_dark">#0D47A1</color>
     <color name="brand_accent">#42A5F5</color>
     <color name="bg_light">#F5F7FA</color>

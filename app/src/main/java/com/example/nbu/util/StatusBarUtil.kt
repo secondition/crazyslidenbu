@@ -15,9 +15,13 @@ object StatusBarUtil {
      * 设置状态栏颜色，兼容所有 Android 版本
      * @param activity Activity
      * @param color 状态栏颜色
-     * @param lightStatusBar 是否使用亮色状态栏图标（深色图标），默认 false（白色图标）
+     * @param lightStatusBar 是否使用亮色状态栏图标（深色图标）
      */
-    fun setStatusBarColor(activity: Activity, @ColorInt color: Int, lightStatusBar: Boolean = false) {
+    fun setStatusBarColor(
+        activity: Activity,
+        @ColorInt color: Int,
+        lightStatusBar: Boolean = AppTheme.isDark(activity)
+    ) {
         activity.window.statusBarColor = color
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

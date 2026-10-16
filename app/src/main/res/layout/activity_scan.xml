@@ -14,9 +14,9 @@
         android:background="@color/brand_primary"
         android:theme="@style/ThemeOverlay.MaterialComponents.Dark.ActionBar"
         app:title="@string/scan"
-        app:titleTextColor="@android:color/white"
+        app:titleTextColor="@color/on_primary"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@android:color/white"/>
+        app:navigationIconTint="@color/on_primary"/>
 
     <com.journeyapps.barcodescanner.DecoratedBarcodeView
         android:id="@+id/barcodeScanner"
