@@ -38,7 +38,7 @@ class WebActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityWebBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.brand_primary))
+        StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.header))
         binding.toolbar.setNavigationOnClickListener { finish() }
 
         val username = intent.getStringExtra(EXTRA_USERNAME).orEmpty()

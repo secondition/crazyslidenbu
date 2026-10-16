@@ -64,7 +64,7 @@ class SignActivity : AppCompatActivity() {
         setContentView(binding.root)
         
         // 设置状态栏颜色
-        StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.brand_primary))
+        StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.header))
 
         userManager = UserManager(this)
         
@@ -108,7 +108,7 @@ class SignActivity : AppCompatActivity() {
 
         scan = binding.toolbar.menu.add(R.string.activity_scan)
         scan.setIcon(R.drawable.ic_qr_code)
-        scan.icon?.mutate()?.setTint(getColor(android.R.color.white))
+        scan.icon?.mutate()?.setTint(getColor(R.color.on_header))
         scan.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
         binding.toolbar.setOnMenuItemClickListener {
             getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(binding.root.windowToken, 0)

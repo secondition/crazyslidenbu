@@ -3,7 +3,6 @@ package com.example.nbu
 import android.app.Application
 import android.util.Log
 import com.example.nbu.network.NbuApiService
-import com.example.nbu.util.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,8 +23,6 @@ class NbuApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-
-        AppTheme.apply(this)
         
         // 启动时预热网络连接（DNS + TLS）
         Log.d(TAG, "App 启动，开始预热网络连接...")

@@ -5,6 +5,7 @@ import android.os.Build
 import android.view.View
 import android.view.WindowInsetsController
 import androidx.annotation.ColorInt
+import androidx.core.graphics.ColorUtils
 
 /**
  * 状态栏工具类
@@ -20,7 +21,7 @@ object StatusBarUtil {
     fun setStatusBarColor(
         activity: Activity,
         @ColorInt color: Int,
-        lightStatusBar: Boolean = AppTheme.isDark(activity)
+        lightStatusBar: Boolean = ColorUtils.calculateLuminance(color) > 0.5
     ) {
         activity.window.statusBarColor = color
         

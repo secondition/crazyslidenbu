@@ -4,10 +4,12 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import android.widget.Toast
@@ -21,10 +23,10 @@ import com.example.nbu.databinding.ActivityLoginBinding
 import com.example.nbu.model.User
 import com.example.nbu.network.NbuApiService
 import com.example.nbu.util.AccountCode
-import com.example.nbu.util.AppTheme
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
 import com.example.nbu.util.requestVerificationCode
+import com.google.android.material.textfield.TextInputLayout
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.client.android.Intents
 import com.journeyapps.barcodescanner.BarcodeEncoder
@@ -84,7 +86,7 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.brand_primary))
+        StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.header))
         userManager = UserManager(this)
         setupViews()
         loadLastLogin()
@@ -135,7 +137,8 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         binding.passwordSlider.onClear = { binding.etPassword.text?.clear() }
-        binding.lampCord.setOnClickListener { cycleTheme() }
+        alignSlider(binding.tilUsername, binding.usernameSlider)
+        alignSlider(binding.tilPassword, binding.passwordSlider)
         binding.btnLogin.setOnClickListener {
             hideKeyboard()
             performLogin()
@@ -340,15 +343,15 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun cycleTheme() {
-        val modes = AppTheme.Mode.entries
-        val next = modes[(modes.indexOf(AppTheme.mode(this)) + 1) % modes.size]
-        AppTheme.setMode(this, next)
-        Toast.makeText(this, getString(when (next) {
-            AppTheme.Mode.LIGHT -> R.string.theme_light
-            AppTheme.Mode.DARK -> R.string.theme_dark
-            AppTheme.Mode.SYSTEM -> R.string.theme_system
-        }), Toast.LENGTH_SHORT).show()
+    private fun alignSlider(field: TextInputLayout, slider: View) {
+        val container = slider.parent as ViewGroup
+        val bounds = Rect()
+        container.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val edit = field.editText ?: return@addOnLayoutChangeListener
+            edit.getDrawingRect(bounds)
+            container.offsetDescendantRectToMyCoords(edit, bounds)
+            slider.y = bounds.exactCenterY() - slider.height / 2f
+        }
     }
 
     private fun performLogin() {

@@ -1,8 +1,10 @@
 package com.example.nbu
 
+import android.graphics.Rect
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
@@ -11,12 +13,38 @@ import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.nbu.view.InputSlider
+import com.google.android.material.textfield.TextInputLayout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class LoginGestureTest {
+    @Test
+    fun slidersStayCenteredWithErrors() {
+        ActivityScenario.launch(LoginActivity::class.java).use { scenario ->
+            assertSliderCentered(R.id.usernameSlider, R.id.etUsername)
+            assertSliderCentered(R.id.passwordSlider, R.id.etPassword)
+            scenario.onActivity { activity ->
+                activity.findViewById<TextInputLayout>(R.id.tilUsername).error = activity.getString(R.string.student_id_required)
+                activity.findViewById<TextInputLayout>(R.id.tilPassword).error = activity.getString(R.string.password_required)
+            }
+            assertSliderCentered(R.id.usernameSlider, R.id.etUsername)
+            assertSliderCentered(R.id.passwordSlider, R.id.etPassword)
+        }
+    }
+
+    private fun assertSliderCentered(sliderId: Int, editId: Int) {
+        onView(withId(sliderId)).check { slider, _ ->
+            val container = slider.parent as ViewGroup
+            val edit = container.findViewById<View>(editId)
+            val bounds = Rect()
+            edit.getDrawingRect(bounds)
+            container.offsetDescendantRectToMyCoords(edit, bounds)
+            assertEquals(bounds.exactCenterY(), slider.y + slider.height / 2f, 0.5f)
+        }
+    }
+
     @Test
     fun manualRoundTripsOpenAccounts() {
         ActivityScenario.launch(LoginActivity::class.java).use { scenario ->

@@ -4,7 +4,8 @@
     <string name="verify">验证</string>
     <string name="back_to_account">返回账户</string>
     <string name="verification_required">请输入风华宁大验证码</string>
-    <string name="login_title">疯滑宁大</string>
+    <string name="title_prefix">疯滑</string>
+    <string name="title_nbu">宁大</string>
     <string name="student_id">学号</string>
     <string name="password">密码</string>
     <string name="clear_student_id">拖动以清空学号</string>
@@ -20,10 +21,6 @@
     <string name="logging_in">正在登录…</string>
     <string name="logged_in">✓ 登录成功</string>
     <string name="log_in">登录</string>
-    <string name="toggle_theme">切换明暗主题</string>
-    <string name="theme_light">主题：亮色</string>
-    <string name="theme_dark">主题：暗色</string>
-    <string name="theme_system">主题：跟随系统</string>
     <string name="login_failed">登录失败</string>
     <string name="disclaimer">仅供快捷签到与学习，使用责任自负。</string>
     <string name="device_permission">自动识别设备标识需要照片访问权限，请允许访问所有照片。</string>

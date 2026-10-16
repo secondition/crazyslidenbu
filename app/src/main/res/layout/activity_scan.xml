@@ -11,11 +11,11 @@
         android:layout_height="wrap_content"
         android:minHeight="?attr/actionBarSize"
         android:fitsSystemWindows="true"
-        android:background="@color/brand_primary"
+        android:background="@color/header"
         app:title="@string/scan"
-        app:titleTextColor="@color/on_primary"
+        app:titleTextColor="@color/on_header"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/on_primary"/>
+        app:navigationIconTint="@color/on_header"/>
 
     <com.journeyapps.barcodescanner.DecoratedBarcodeView
         android:id="@+id/barcodeScanner"

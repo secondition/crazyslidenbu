@@ -12,11 +12,11 @@
         android:layout_height="wrap_content"
         android:minHeight="?attr/actionBarSize"
         android:fitsSystemWindows="true"
-        android:background="@color/brand_primary"
+        android:background="@color/header"
         app:title="@string/activity_title"
-        app:titleTextColor="@color/on_primary"
+        app:titleTextColor="@color/on_header"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/on_primary"/>
+        app:navigationIconTint="@color/on_header"/>
 
     <FrameLayout
         android:layout_width="match_parent"
