@@ -406,7 +406,13 @@ class NbuApiService(private val username: String, private val userManager: UserM
         SignResult(success, courseCode, data.msg ?: response.text)
     }
 
-    suspend fun signActivity(code: ActivityCode): Result<String> = result {
+    suspend fun signActivity(
+        code: ActivityCode,
+        requestCode: suspend (String) -> String?
+    ): Result<String> = result {
+        requireNotNull(userManager.getDeviceId(username)) { "活动签到需要账号绑定的设备标识" }
+        val password = requireNotNull(userManager.getUser(username)) { "请先完成账号登录" }.password
+        ensurePlatformSession(password, requestCode)
         val entry = ACTIVITY_ENTRY.toHttpUrl()
         val page = followRedirects(execute(accountClient, request(ACTIVITY_ENTRY).build()))
         page.requireSuccess("活动授权失败")

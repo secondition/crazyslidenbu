@@ -20,7 +20,6 @@ import com.example.nbu.databinding.ActivityLoginBinding
 import com.example.nbu.databinding.DialogAddUserBinding
 import com.example.nbu.databinding.DialogAccountCodeBinding
 import com.example.nbu.databinding.DialogUserManagementBinding
-import com.example.nbu.databinding.DialogVerificationBinding
 import com.example.nbu.model.User
 import com.example.nbu.network.NbuApiService
 import com.example.nbu.util.StatusBarUtil
@@ -31,12 +30,11 @@ import com.journeyapps.barcodescanner.BarcodeEncoder
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.example.nbu.util.UserManager
+import com.example.nbu.util.requestVerificationCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
 
 /**
  * 登录界面
@@ -369,35 +367,6 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun requestVerificationCode(message: String): String? = withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { continuation ->
-            val dialogBinding = DialogVerificationBinding.inflate(layoutInflater)
-            val dialog = MaterialAlertDialogBuilder(this@LoginActivity)
-                .setTitle("验证登录设备")
-                .setMessage(message)
-                .setView(dialogBinding.root)
-                .setPositiveButton("验证", null)
-                .setNegativeButton("取消", null)
-                .create()
-            dialog.setOnShowListener {
-                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    val code = dialogBinding.etCode.text?.toString()?.trim().orEmpty()
-                    if (code.isEmpty()) {
-                        dialogBinding.root.error = "请输入风华宁大验证码"
-                    } else if (continuation.isActive) {
-                        continuation.resume(code)
-                        dialog.dismiss()
-                    }
-                }
-            }
-            dialog.setOnDismissListener {
-                if (continuation.isActive) continuation.resume(null)
-            }
-            continuation.invokeOnCancellation { binding.root.post { dialog.dismiss() } }
-            dialog.show()
-        }
-    }
-    
     private fun navigateToSignActivity(jsessionId: String, username: String) {
         val intent = Intent(this, SignActivity::class.java)
         intent.putExtra(SignActivity.EXTRA_JSESSION_ID, jsessionId)

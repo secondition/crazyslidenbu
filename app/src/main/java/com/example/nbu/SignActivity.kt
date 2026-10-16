@@ -18,10 +18,12 @@ import com.example.nbu.network.NbuApiService
 import com.example.nbu.network.SessionExpiredException
 import com.example.nbu.util.StatusBarUtil
 import com.example.nbu.util.UserManager
+import com.example.nbu.util.requestVerificationCode
 import com.google.android.material.tabs.TabLayout
 import com.google.zxing.client.android.Intents
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -246,14 +248,19 @@ class SignActivity : AppCompatActivity() {
         binding.tvActivityTitle.setText(R.string.activity_submitting)
         binding.tvActivityMessage.visibility = View.GONE
         lifecycleScope.launch {
-            apiService.signActivity(code).onSuccess {
-                showActivityResult(true, it)
-            }.onFailure {
-                showActivityResult(false, if (it is SessionExpiredException) {
-                    getString(R.string.activity_auth_required)
-                } else {
-                    it.message ?: getString(R.string.activity_failed)
-                })
+            try {
+                apiService.signActivity(code, ::requestVerificationCode).onSuccess {
+                    showActivityResult(true, it)
+                }.onFailure {
+                    showActivityResult(false, if (it is SessionExpiredException) {
+                        getString(R.string.activity_auth_required)
+                    } else {
+                        it.message ?: getString(R.string.activity_failed)
+                    })
+                }
+            } catch (e: CancellationException) {
+                showActivityResult(false, getString(R.string.activity_cancelled))
+                throw e
             }
         }
     }
