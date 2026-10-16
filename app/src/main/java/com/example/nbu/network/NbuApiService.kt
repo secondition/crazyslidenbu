@@ -48,6 +48,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         private const val AUTH_URL = "https://uis.nbu.edu.cn/authserver/"
         private const val LOGIN_URL = "${AUTH_URL}login"
         private const val PLATFORM_URL = "https://mobile.campushoy.com/"
+        private const val PLATFORM_DEVICE_TYPE = "3"
         private const val ACTIVITY_ENTRY = "${ActivityCode.BASE_URL}/mobile/entry-scan/index.html"
         private const val SERVICE_URL = "https://attendance.nbu.edu.cn/api/getIndex"
         private const val USER_INFO_URL = "https://attendance.nbu.edu.cn/api/user/get/user/info"
@@ -76,7 +77,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
     private val browser = userManager.getBrowserProfile(username)
     private val cookies = SimpleCookieJar(userManager.getCookies(username))
     private val accountClient = client.newBuilder().cookieJar(cookies).build()
-    private var platform = userManager.getPlatformSession(username)
+    private var platform = userManager.getPlatformSession(username)?.takeIf { it.deviceType == PLATFORM_DEVICE_TYPE }
 
     suspend fun login(
         password: String,
@@ -137,6 +138,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         platform = null
         userManager.clearPlatformSession(username)
         for (domain in listOf("campushoy.com", "cpdaily.com")) cookies.remove("sessionToken", domain)
+        cookies.remove("MOD_AUTH_CAS", ACTIVITY_ENTRY.toHttpUrl().host)
         userManager.saveCookies(username, cookies.snapshot())
 
         val keys = PlatformCipher.secretResponse(platformPost(
@@ -208,7 +210,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         val token = data.sessionToken?.takeIf { it.isNotBlank() } ?: error("平台响应缺少登录会话")
         val userId = data.userId?.takeIf { it.isNotBlank() } ?: error("平台响应缺少用户信息")
         val tgc = data.tgc?.takeIf { it.isNotBlank() } ?: error("平台响应缺少学校登录凭据")
-        val session = PlatformSession(token, userId, tgc, idsToken)
+        val session = PlatformSession(token, userId, tgc, idsToken, PLATFORM_DEVICE_TYPE)
         platform = session
         userManager.savePlatformSession(username, session)
         for (domain in listOf("campushoy.com", "cpdaily.com")) {
@@ -238,11 +240,12 @@ class NbuApiService(private val username: String, private val userManager: UserM
             "lon" to 0.0, "lat" to 0.0, "userId" to platform?.userId.orEmpty()
         ))
         return request(url)
+            .header("User-Agent", browser.tabletUserAgent)
             .header("sessionTokenKey", token)
             .header("SessionToken", token)
             .header("clientType", "cpdaily_student")
             .header("tenantId", "nbu")
-            .header("deviceType", "1")
+            .header("deviceType", PLATFORM_DEVICE_TYPE)
             .header("CpdailyClientType", "CPDAILY")
             .header("CpdailyStandAlone", "1")
             .header("CpdailyInfo", PlatformCipher.des(info, "ST83=@XV"))
@@ -336,13 +339,13 @@ class NbuApiService(private val username: String, private val userManager: UserM
         return response
     }
 
-    private suspend fun followRedirects(initial: HttpResponse): HttpResponse {
+    private suspend fun followRedirects(initial: HttpResponse, userAgent: String = browser.userAgent): HttpResponse {
         var response = initial
         repeat(10) {
             if (!response.isRedirect) return response
             val target = response.redirectUrl()
             if (target.encodedPath.startsWith("/iap/")) throw SessionExpiredException()
-            response = execute(accountClient, request(target.toString()).build())
+            response = execute(accountClient, request(target.toString()).header("User-Agent", userAgent).build())
         }
         check(!response.isRedirect) { "登录跳转次数过多" }
         return response
@@ -411,7 +414,8 @@ class NbuApiService(private val username: String, private val userManager: UserM
         val password = requireNotNull(userManager.getUser(username)) { "请先完成账号登录" }.password
         ensurePlatformSession(password, requestCode)
         val entry = ACTIVITY_ENTRY.toHttpUrl()
-        val page = followRedirects(execute(accountClient, request(ACTIVITY_ENTRY).build()))
+        val page = followRedirects(execute(accountClient,
+            request(ACTIVITY_ENTRY).header("User-Agent", browser.tabletUserAgent).build()), browser.tabletUserAgent)
         page.requireSuccess("活动授权失败")
         if (page.url.host != entry.host || page.url.encodedPath != entry.encodedPath ||
             cookies.loadForRequest(entry).none { it.name == "MOD_AUTH_CAS" }) {

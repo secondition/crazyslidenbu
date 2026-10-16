@@ -103,7 +103,7 @@ class WebActivity : AppCompatActivity() {
                         }
                         check(accepted) { getString(R.string.activity_cookie_failed) }
                     }
-                    binding.webView.settings.userAgentString = manager.getBrowserProfile(user.username).userAgent
+                    binding.webView.settings.userAgentString = manager.getBrowserProfile(user.username).tabletUserAgent
                     binding.tvStatus.visibility = View.GONE
                     binding.webView.visibility = View.VISIBLE
                     val completion = CompletableDeferred<String>()
