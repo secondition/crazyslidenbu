@@ -25,7 +25,11 @@ import com.example.nbu.util.requestVerificationCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -42,6 +46,7 @@ class WebActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWebBinding
     private lateinit var users: List<User>
     private val results = linkedMapOf<String, String>()
+    private val groupActive = mutableSetOf<String>()
     private var currentUser: String? = null
     private var pageInFlight = false
     private var response: CompletableDeferred<String>? = null
@@ -69,16 +74,23 @@ class WebActivity : AppCompatActivity() {
         savedInstanceState?.getString("active")?.takeIf { it in usernames && it !in results }?.let {
             results[it] = getString(R.string.activity_interrupted)
         }
+        savedInstanceState?.getStringArrayList("groupActive").orEmpty()
+            .filter { it in usernames && it !in results }.forEach { results[it] = getString(R.string.activity_interrupted) }
+        if (users.size > 1) {
+            renderResults()
+            signGroup(code, manager)
+            return
+        }
         setupWebView()
         renderResults()
         lifecycleScope.launch {
-            for ((index, user) in users.withIndex()) {
-                if (user.username in results) continue
+            val user = users.single()
+            if (user.username !in results) {
                 currentUser = user.username
                 binding.webView.visibility = View.INVISIBLE
                 binding.tvStatus.visibility = View.VISIBLE
                 binding.tvStatus.setTextColor(getColor(R.color.text_secondary))
-                binding.tvStatus.text = getString(R.string.group_activity_authorizing, user.displayName, index + 1, users.size)
+                binding.tvStatus.text = "${user.displayName}\n${getString(R.string.activity_authorizing)}"
                 binding.progress.visibility = View.VISIBLE
                 renderResults()
                 try {
@@ -133,8 +145,43 @@ class WebActivity : AppCompatActivity() {
             if (binding.webView.visibility != View.VISIBLE) {
                 binding.progress.visibility = View.GONE
                 binding.tvStatus.visibility = View.VISIBLE
-                binding.tvStatus.text = if (users.size == 1) results[users.first().username]
-                    else getString(R.string.group_activity_complete)
+                binding.tvStatus.text = results[user.username]
+            }
+        }
+    }
+
+    private fun signGroup(code: ActivityCode, manager: UserManager) {
+        binding.webView.visibility = View.GONE
+        binding.progress.visibility = View.VISIBLE
+        binding.tvStatus.setText(R.string.group_activity_running)
+        val verification = Mutex()
+        lifecycleScope.launch {
+            try {
+                users.filter { it.username !in results }.map { user -> async {
+                    try {
+                        val api = NbuApiService(user.username, manager)
+                        api.authorizeActivity { message ->
+                            verification.withLock {
+                                requestVerificationCode("${user.displayName}\n$message", binding.content, binding.verification)
+                            }
+                        }.getOrThrow()
+                        groupActive.add(user.username)
+                        results[user.username] = "✓ ${api.signActivity(code).getOrThrow()}"
+                    } catch (e: CancellationException) {
+                        if (!isFinishing && !isDestroyed) finish()
+                        throw e
+                    } catch (e: Exception) {
+                        val message = if (e is SessionExpiredException) getString(R.string.activity_auth_required)
+                            else e.message ?: getString(R.string.activity_failed)
+                        results[user.username] = getString(R.string.sign_failed, message)
+                    } finally {
+                        groupActive.remove(user.username)
+                        renderResults()
+                    }
+                } }.awaitAll()
+                binding.tvStatus.setText(R.string.group_activity_complete)
+            } finally {
+                binding.progress.visibility = View.GONE
             }
         }
     }
@@ -203,7 +250,7 @@ class WebActivity : AppCompatActivity() {
     private fun renderResults() {
         binding.tvGroupStatus.visibility = if (users.size > 1) View.VISIBLE else View.GONE
         binding.tvGroupStatus.text = users.joinToString("\n") { user ->
-            val status = results[user.username] ?: getString(if (user.username == currentUser)
+            val status = results[user.username] ?: getString(if (users.size > 1 || user.username == currentUser)
                 R.string.activity_processing else R.string.activity_waiting)
             "${user.displayName}：$status"
         }
@@ -221,6 +268,7 @@ class WebActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         outState.putBundle("results", Bundle().apply { results.forEach { (username, message) -> putString(username, message) } })
         if (pageInFlight) outState.putString("active", currentUser)
+        outState.putStringArrayList("groupActive", ArrayList(groupActive))
     }
 
     override fun onPause() {

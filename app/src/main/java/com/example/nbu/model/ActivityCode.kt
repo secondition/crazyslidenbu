@@ -13,6 +13,14 @@ data class ActivityCode(
 ) {
     val isSignin: Boolean get() = signType == "in"
 
+    val signUrl: String get() = if (toolCode == "1")
+        "$BASE_URL/mobile/signTool/${if (isSignin) "signInWithScan" else "signOutWithScan"}"
+        else "$BASE_URL/mobile/clockinTool/clockinWithQr"
+
+    val signParams: Map<String, Any> get() = if (toolCode == "1")
+        mapOf("wid" to taskWid, "qrUuid" to uuid, "uaIsCpadaily" to true)
+        else mapOf("isSignin" to isSignin, "qrCode" to uuid, "periodWid" to wid)
+
     companion object {
         const val BASE_URL = "https://nbu.campusphere.net/wec-activity-user-apps"
 

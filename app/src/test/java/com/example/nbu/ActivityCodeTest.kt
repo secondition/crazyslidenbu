@@ -16,9 +16,14 @@ class ActivityCodeTest {
         assertEquals("34", sign.wid)
         assertTrue(sign.isSignin)
         assertEquals(link, sign.url)
+        assertEquals("${ActivityCode.BASE_URL}/mobile/signTool/signInWithScan", sign.signUrl)
+        assertEquals(mapOf("wid" to "12", "qrUuid" to "qr", "uaIsCpadaily" to true), sign.signParams)
+        assertEquals("${ActivityCode.BASE_URL}/mobile/signTool/signOutWithScan", sign.copy(signType = "out").signUrl)
         val clockin = ActivityCode.parse(link.replace("toolCode=1", "toolCode=9").replace("signType=in", "signType=out"))
         assertEquals("9", clockin.toolCode)
         assertFalse(clockin.isSignin)
+        assertEquals("${ActivityCode.BASE_URL}/mobile/clockinTool/clockinWithQr", clockin.signUrl)
+        assertEquals(mapOf("isSignin" to false, "qrCode" to "qr", "periodWid" to "34"), clockin.signParams)
         assertThrows(IllegalArgumentException::class.java) { ActivityCode.parse(link.replace("nbu.campusphere.net", "example.com")) }
     }
 }

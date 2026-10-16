@@ -403,6 +403,21 @@ class NbuApiService(private val username: String, private val userManager: UserM
         cookies.snapshot().filter { it.expiresAt > System.currentTimeMillis() }
     }
 
+    suspend fun signActivity(code: ActivityCode): Result<String> = result {
+        val body = gson.toJson(code.signParams).toRequestBody("application/json; charset=utf-8".toMediaType())
+        val response = execute(accountClient, request(code.signUrl)
+            .header("Referer", code.url.substringBefore('#')).post(body).build())
+        response.requireSession()
+        response.requireSuccess("活动签到请求失败")
+        val data = gson.fromJson(response.text, ActivityResponse::class.java) ?: error("活动签到响应为空")
+        val loggedIn = data.data?.takeIf { it.isJsonObject }?.asJsonObject?.get("WEC-HASLOGIN")?.asBoolean
+        if (data.code == "350F9D68221A0DB19024EE40CFC3C7F8" || loggedIn == false) {
+            throw SessionExpiredException()
+        }
+        check(data.code == "0") { data.message ?: "活动签到失败（${data.code}）" }
+        if (code.isSignin) "已签到" else "已签退"
+    }
+
     private fun request(url: String, jsessionId: String? = null): Request.Builder {
         val builder = Request.Builder().url(url)
             .header("User-Agent", browser.tabletUserAgent)
@@ -511,6 +526,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         val sessionToken: String?,
         val msgTip: String?
     )
+    private data class ActivityResponse(val code: String?, val message: String?, val data: JsonElement?)
     private data class ReAuthTypeResponse(val code: Int?, val message: String?)
     private data class DynamicCodeResponse(val res: String?, val returnMessage: String?)
     private data class ReAuthResponse(val code: String?, val msg: String?)

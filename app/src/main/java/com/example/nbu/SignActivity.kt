@@ -25,6 +25,8 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 
 /**
@@ -110,24 +112,28 @@ class SignActivity : AppCompatActivity() {
         setLoadingState(true, getString(R.string.loading_courses))
         courseJob = lifecycleScope.launch {
             try {
-                val courses = linkedMapOf<String, List<Course>>()
-                val failures = mutableListOf<String>()
-                for (user in users) {
-                    try {
-                        val session = userManager.getCachedSession(user.username) ?: throw SessionExpiredException()
-                        courses[user.username] = services.getValue(user.username).getCourses(session).getOrThrow()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        if (e is SessionExpiredException) userManager.clearSession(user.username)
-                        failures.add("${user.displayName}：${e.message}")
+                val failures = mutableMapOf<String, String>()
+                val courses = users.map { user ->
+                    async {
+                        val courses = try {
+                            val session = userManager.getCachedSession(user.username) ?: throw SessionExpiredException()
+                            services.getValue(user.username).getCourses(session).getOrThrow()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            if (e is SessionExpiredException) userManager.clearSession(user.username)
+                            failures[user.username] = "${user.displayName}：${e.message}"
+                            emptyList()
+                        }
+                        user.username to courses
                     }
-                }
+                }.awaitAll().toMap()
                 val combined = GroupCourse.merge(courses)
                 binding.emptyView.visibility = if (combined.isEmpty() && failures.isEmpty()) View.VISIBLE else View.GONE
                 binding.rvCourses.visibility = if (combined.isEmpty()) View.GONE else View.VISIBLE
                 adapter.setCourses(combined)
-                binding.tvGroupStatus.text = (listOf(resultSummary) + failures).filter { it.isNotBlank() }.joinToString("\n")
+                binding.tvGroupStatus.text = (listOf(resultSummary) + users.mapNotNull { failures[it.username] })
+                    .filter { it.isNotBlank() }.joinToString("\n")
                 binding.tvGroupStatus.visibility = if (binding.tvGroupStatus.text.isEmpty()) View.GONE else View.VISIBLE
             } finally {
                 setLoadingState(false)
@@ -150,11 +156,14 @@ class SignActivity : AppCompatActivity() {
         binding.swipeRefresh.isEnabled = false
         signJob = lifecycleScope.launch {
             try {
-                val results = mutableListOf<String>()
-                for ((index, user) in users.withIndex()) {
-                    binding.tvGroupStatus.visibility = View.VISIBLE
-                    binding.tvGroupStatus.text = (results + getString(R.string.group_signing,
-                        user.displayName, index + 1, users.size)).joinToString("\n")
+                val results = users.associate { it.username to getString(R.string.activity_processing) }.toMutableMap()
+                fun renderResults() {
+                    resultSummary = users.joinToString("\n") { "${it.displayName}：${results.getValue(it.username)}" }
+                    binding.tvGroupStatus.text = resultSummary
+                }
+                binding.tvGroupStatus.visibility = View.VISIBLE
+                renderResults()
+                users.map { user -> async {
                     val message = try {
                         val session = userManager.getCachedSession(user.username) ?: throw SessionExpiredException()
                         val api = services.getValue(user.username)
@@ -174,10 +183,9 @@ class SignActivity : AppCompatActivity() {
                         if (e is SessionExpiredException) userManager.clearSession(user.username)
                         getString(R.string.sign_failed, e.message.orEmpty())
                     }
-                    results.add("${user.displayName}：$message")
-                    resultSummary = results.joinToString("\n")
-                }
-                binding.tvGroupStatus.text = resultSummary
+                    results[user.username] = message
+                    renderResults()
+                } }.awaitAll()
                 loadCourses()
             } finally {
                 scan.isEnabled = true
