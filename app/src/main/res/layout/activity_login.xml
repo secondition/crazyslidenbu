@@ -239,23 +239,15 @@
         android:id="@+id/adScreen"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/black"
+        android:background="@color/header"
         android:visibility="gone">
 
-        <!-- NASA/JPL-Caltech, Visions of the Future: https://www.jpl.nasa.gov/images/earth-jpl-travel-poster/ -->
         <ImageView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:src="@drawable/ad_poster"
-            android:contentDescription="@null"/>
-
-        <ImageView
-            android:layout_width="160dp"
-            android:layout_height="160dp"
+            android:id="@+id/adImage"
+            android:layout_width="240dp"
+            android:layout_height="240dp"
             android:layout_gravity="center"
-            android:alpha="0.6"
-            android:src="@drawable/splash_icon"
+            android:scaleType="fitCenter"
             android:contentDescription="@null"/>
 
         <TextView
@@ -270,15 +262,6 @@
             android:textColor="@color/white"
             android:textSize="16sp"
             android:textStyle="bold"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="16dp"
-            android:text="@string/ad_credit"
-            android:textColor="@color/white"
-            android:textSize="12sp"/>
 
         <TextView
             android:layout_width="wrap_content"

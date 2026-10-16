@@ -5,7 +5,9 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.ImageDecoder
 import android.graphics.Rect
+import android.graphics.drawable.AnimatedImageDrawable
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -141,6 +143,11 @@ class LoginActivity : AppCompatActivity() {
         outState.putString("selectedUser", selectedUser?.username)
         outState.putInt("roundTrips", roundTrips)
         outState.putStringArrayList("group", ArrayList(selectedAccounts))
+    }
+
+    override fun onDestroy() {
+        dismissSplashAd()
+        super.onDestroy()
     }
 
     private fun setupViews() {
@@ -281,6 +288,11 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun showSplashAd() {
+        val images = intArrayOf(R.raw.ad_1, R.raw.ad_2, R.raw.ad_3)
+        val source = ImageDecoder.createSource(resources, images[userManager.nextSplashAdIndex(images.size)])
+        val animation = ImageDecoder.decodeDrawable(source) as AnimatedImageDrawable
+        binding.adImage.setImageDrawable(animation)
+        animation.start()
         binding.adScreen.visibility = View.VISIBLE
         binding.adScreen.setOnClickListener { openCampusApp() }
         binding.btnOpenCampus.setOnClickListener { openCampusApp() }
@@ -300,6 +312,7 @@ class LoginActivity : AppCompatActivity() {
         adCountdown?.cancel()
         adCountdown = null
         getSystemService(SensorManager::class.java)?.unregisterListener(shakeListener)
+        (binding.adImage.drawable as? AnimatedImageDrawable)?.stop()
         binding.adScreen.visibility = View.GONE
     }
 

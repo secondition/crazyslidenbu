@@ -33,6 +33,7 @@ class UserManager(context: Context) {
         private const val KEY_LAST_USERNAME = "last_username"
         private const val KEY_LAST_PASSWORD = "last_password"
         private const val KEY_SPLASH_AD = "splash_ad"
+        private const val KEY_SPLASH_AD_INDEX = "splash_ad_index"
         
         private const val KEY_PREFIX_BROWSER = "browser_"
         private const val KEY_PREFIX_PLATFORM = "platform_"
@@ -236,6 +237,12 @@ class UserManager(context: Context) {
 
     fun setSplashAdEnabled(enabled: Boolean) {
         prefs.edit { putBoolean(KEY_SPLASH_AD, enabled) }
+    }
+
+    fun nextSplashAdIndex(count: Int): Int {
+        val index = prefs.getInt(KEY_SPLASH_AD_INDEX, 0) % count
+        prefs.edit { putInt(KEY_SPLASH_AD_INDEX, (index + 1) % count) }
+        return index
     }
 
     /**
