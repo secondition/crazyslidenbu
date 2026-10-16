@@ -6,7 +6,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.nbu.model.BrowserProfile
 import com.example.nbu.model.DeviceProfile
-import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.User
 import com.example.nbu.util.AccountCode
 import com.example.nbu.util.UserManager
@@ -35,20 +34,18 @@ class BrowserProfileTest {
     }
 
     @Test
-    fun importedAccountRestoresSharedAuthentication() {
+    fun importedAccountRestoresSharedIdentity() {
         val context = InstrumentationRegistry.getInstrumentation().context
         val manager = UserManager(context)
         val user = User(UUID.randomUUID().toString(), "shared", deviceId = UUID.randomUUID().toString())
         manager.saveUser(user.copy(password = "old", remark = "group"))
         manager.saveSession(user.username, "old")
-        val session = PlatformSession("token", "user", "tgc", "ids", "3", requireNotNull(user.deviceId))
         val browser = BrowserProfile("shared browser", "shared fingerprint")
         val device = DeviceProfile("16", "shared tablet")
-        manager.importAccount(AccountCode.Account(user, session, browser, device))
+        manager.importAccount(AccountCode.Account(user, browser, device))
 
         val restored = UserManager(context)
         assertEquals(user.copy(remark = "group"), restored.getUser(user.username))
-        assertEquals(session, restored.getPlatformSession(user.username))
         assertEquals(browser, restored.getBrowserProfile(user.username))
         assertEquals(device, restored.getDeviceProfile(user.username))
         assertNull(restored.getCachedSession(user.username))
@@ -72,18 +69,13 @@ class BrowserProfileTest {
         assertEquals(first.deviceId, restored.getDeviceId(first.username))
         assertEquals(second.deviceId, restored.getDeviceId(second.username))
         manager.saveSession(first.username, "course")
-        manager.savePlatformSession(first.username, PlatformSession("token", "user", "tgc", "ids", "3", requireNotNull(first.deviceId)))
         val rebound = first.copy(deviceId = UUID.randomUUID().toString())
         manager.saveUser(rebound)
         assertEquals(rebound.deviceId, restored.getDeviceId(first.username))
-        assertNull(restored.getPlatformSession(first.username))
         assertEquals("course", restored.getCachedSession(first.username))
 
         val bound = ordinary.copy(deviceId = UUID.randomUUID().toString(), local = true)
-        val session = PlatformSession("token", "user", "tgc", "ids", "3", requireNotNull(bound.deviceId))
-        manager.savePlatformSession(bound.username, session)
         manager.saveUser(bound)
         assertEquals(bound, restored.getUser(bound.username))
-        assertEquals(session, restored.getPlatformSession(bound.username))
     }
 }

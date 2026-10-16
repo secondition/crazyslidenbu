@@ -5,8 +5,6 @@ import android.util.Log
 import com.example.nbu.model.ActivityCode
 import com.example.nbu.model.Course
 import com.example.nbu.model.CourseResponse
-import com.example.nbu.model.DeviceProfile
-import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.SignResult
 import com.example.nbu.util.UserManager
 import com.google.gson.Gson
@@ -40,12 +38,7 @@ import kotlin.random.Random
 /**
  * NBU 平台认证与考勤服务
  */
-class NbuApiService(
-    private val username: String,
-    private val userManager: UserManager,
-    private val deviceId: String? = userManager.getDeviceId(username),
-    private val device: DeviceProfile = userManager.getDeviceProfile(username)
-) {
+class NbuApiService(private val username: String, private val userManager: UserManager) {
 
     companion object {
         private const val TAG = "NbuApiService"
@@ -80,74 +73,52 @@ class NbuApiService(
 
     private val gson = Gson()
     private val browser = userManager.getBrowserProfile(username)
+    private val deviceId = userManager.getDeviceId(username)
+    private val device = userManager.getDeviceProfile(username)
     private val cookies = SimpleCookieJar(userManager.getCookies(username))
     private val accountClient = client.newBuilder().cookieJar(cookies).build()
-    private var platform = userManager.getPlatformSession(username)?.takeIf {
-        it.deviceType == PLATFORM_DEVICE_TYPE && it.deviceId == deviceId
-    }
 
     suspend fun login(
         password: String,
         requestCode: suspend (String) -> String?
     ): Result<String> = result {
-        requireNotNull(deviceId) { "请在账户管理中添加本机账户或扫码导入，绑定设备标识后登录" }
-        val user = userManager.getUser(username)
-        if (user?.password != password || user.deviceId != deviceId) {
-            platform = null
+        if (userManager.getUser(username)?.password != password) {
             userManager.clearAuthentication(username)
             cookies.snapshot().filter {
                 it.name in setOf("sessionToken", "CASTGC", "AUTHTGC", "JSESSIONID", "MOD_AUTH_CAS")
             }.forEach { cookies.remove(it.name, it.domain) }
             userManager.saveCookies(username, cookies.snapshot())
         }
-        if (platform == null) userManager.clearSession(username)
-        ensurePlatformSession(password, requestCode)
         val cached = userManager.getCachedSession(username)
         if (cached != null && validateSession(cached)) return@result cached
         userManager.clearSession(username)
-        restoreTgc(requireNotNull(platform).tgc)
-        val page = followRedirects(execute(accountClient, request(SERVICE_URL).build()))
-        page.requireSuccess("获取考勤页面失败")
+        val loginUrl = LOGIN_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("service", SERVICE_URL)
+            .build()
+        val loginRequest = request(loginUrl.toString()).build()
+        var page = followRedirects(execute(accountClient, loginRequest))
+        if (page.url.host == loginUrl.host && page.url.encodedPath == loginUrl.encodedPath) {
+            val response = submitPassword(page, password, request(page.url.toString()).build())
+            check(response.isRedirect) {
+                parseLoginError(response.text) ?: "登录失败，请检查账号密码或验证码要求（HTTP ${response.code}）"
+            }
+            page = followRedirects(response)
+        }
+        if (page.url.encodedPath == "/authserver/reAuthCheck/reAuthLoginView.do") {
+            page = followRedirects(authenticateDevice(page, loginRequest, requestCode))
+        }
+        page.requireSuccess("登录跳转失败")
         val jsessionId = cookies.getJSessionId(SERVICE_URL.toHttpUrl())
-            ?: error("未取得考勤登录会话")
-        check(validateSession(jsessionId)) { "考勤账号校验失败" }
+            ?: error(parseLoginError(page.text) ?: "登录未完成，未获取到考勤会话")
+        check(validateSession(jsessionId)) { parseLoginError(page.text) ?: "登录未完成，账号校验失败" }
         userManager.saveSession(username, jsessionId)
         jsessionId
     }
 
-    suspend fun checkPlatformSession(): Result<Boolean> = result { validatePlatformSession() }
-
-    private suspend fun validatePlatformSession(): Boolean {
-        val cached = platform
-        if (cached != null) {
-            val data = try {
-                val response = platformPost("v6/auth/authentication/new/validation", mapOf(
-                    "tgc" to PlatformCipher.des(cached.tgc, "XCE927=="),
-                    "idsToken" to PlatformCipher.des(cached.idsToken, "XCE927==")
-                ))
-                gson.fromJson(response, PlatformLoginResult::class.java)
-            } catch (_: SessionExpiredException) {
-                null
-            }
-            if (data != null && data.tgcStatus != "tgcInvalidate" && data.status == "cpdailyPage" &&
-                data.authStatus == "auth" && data.deviceStatus != "exception") {
-                savePlatformSession(data, cached.idsToken)
-                return true
-            }
-        }
-        platform = null
-        userManager.clearPlatformSession(username)
+    private suspend fun loginPlatform(password: String, requestCode: suspend (String) -> String?) {
         for (domain in listOf("campushoy.com", "cpdaily.com")) cookies.remove("sessionToken", domain)
         cookies.remove("MOD_AUTH_CAS", ACTIVITY_ENTRY.toHttpUrl().host)
         userManager.saveCookies(username, cookies.snapshot())
-        return false
-    }
-
-    private suspend fun ensurePlatformSession(password: String, requestCode: suspend (String) -> String?) {
-        if (validatePlatformSession()) return
-        check(userManager.getUser(username)?.local != false) {
-            "分享的登录状态已失效，请由本机账户重新登录并生成分享码"
-        }
         val keys = PlatformCipher.secretResponse(platformPost(
             "app/auth/dynamic/secret/getSecretKey/v-920", PlatformCipher.secretRequest()
         ).asString)
@@ -167,7 +138,21 @@ class NbuApiService(
             "a" to PlatformCipher.encrypt(payload, key),
             "b" to "first_v4"
         )).asString
-        savePlatformSession(gson.fromJson(PlatformCipher.decrypt(response, key), PlatformLoginResult::class.java), ticket)
+        val data = gson.fromJson(PlatformCipher.decrypt(response, key), PlatformLoginResult::class.java)
+        check(data.deviceStatus != "exception") {
+            data.deviceExceptionMsg ?: "平台未识别此账号的设备身份"
+        }
+        check(data.status == "cpdailyPage" && data.authStatus == "auth") {
+            data.msgTip ?: "平台账号认证未完成"
+        }
+        val token = data.sessionToken?.takeIf { it.isNotBlank() } ?: error("平台响应缺少登录会话")
+        for (domain in listOf("campushoy.com", "cpdaily.com")) {
+            val values = mapOf("sessionToken" to token, "tenantId" to "nbu", "clientType" to "cpdaily_student", "standAlone" to "1")
+            cookies.saveFromResponse("https://$domain/".toHttpUrl(), values.map { (name, value) ->
+                Cookie.Builder().name(name).value(value).domain(domain).path("/").build()
+            })
+        }
+        userManager.saveCookies(username, cookies.snapshot())
     }
 
     private suspend fun mobileLogin(
@@ -207,45 +192,12 @@ class NbuApiService(
         error("移动端登录跳转次数过多")
     }
 
-    private fun savePlatformSession(data: PlatformLoginResult, idsToken: String) {
-        check(data.deviceStatus != "exception") {
-            data.deviceExceptionMsg ?: "平台未识别此账号的设备身份"
-        }
-        check(data.status == "cpdailyPage" && data.authStatus == "auth") {
-            data.msgTip ?: "平台账号认证未完成"
-        }
-        val token = data.sessionToken?.takeIf { it.isNotBlank() } ?: error("平台响应缺少登录会话")
-        val userId = data.userId?.takeIf { it.isNotBlank() } ?: error("平台响应缺少用户信息")
-        val tgc = data.tgc?.takeIf { it.isNotBlank() } ?: error("平台响应缺少学校登录凭据")
-        val session = PlatformSession(token, userId, tgc, idsToken, PLATFORM_DEVICE_TYPE, requireNotNull(deviceId))
-        platform = session
-        userManager.savePlatformSession(username, session)
-        userManager.saveDeviceProfile(username, device)
-        for (domain in listOf("campushoy.com", "cpdaily.com")) {
-            val values = mapOf("sessionToken" to token, "tenantId" to "nbu", "clientType" to "cpdaily_student", "standAlone" to "1")
-            cookies.saveFromResponse("https://$domain/".toHttpUrl(), values.map { (name, value) ->
-                Cookie.Builder().name(name).value(value).domain(domain).path("/").build()
-            })
-        }
-        restoreTgc(tgc)
-    }
-
-    private fun restoreTgc(tgc: String) {
-        val url = AUTH_URL.toHttpUrl()
-        val values = listOf("CASTGC", "AUTHTGC").map { name ->
-            cookies.remove(name, url.host)
-            Cookie.Builder().name(name).value(tgc).hostOnlyDomain(url.host).path(url.encodedPath.trimEnd('/')).build()
-        }
-        cookies.saveFromResponse(url, values)
-        userManager.saveCookies(username, cookies.snapshot())
-    }
-
     private fun platformRequest(url: String): Request.Builder {
-        val token = PlatformCipher.des(platform?.sessionToken.orEmpty(), "XCE927==")
+        val token = PlatformCipher.des("", "XCE927==")
         val info = gson.toJson(linkedMapOf(
             "systemName" to "android", "systemVersion" to device.systemVersion, "model" to device.model,
             "deviceId" to requireNotNull(deviceId), "appVersion" to "10.2.7", "cpdailyVersion" to "9.9.10",
-            "lon" to 0.0, "lat" to 0.0, "userId" to platform?.userId.orEmpty()
+            "lon" to 0.0, "lat" to 0.0, "userId" to ""
         ))
         return request(url)
             .header("sessionTokenKey", token)
@@ -419,7 +371,7 @@ class NbuApiService(
     ): Result<List<Cookie>> = result {
         requireNotNull(deviceId) { "活动签到需要账号绑定的设备标识" }
         val password = requireNotNull(userManager.getUser(username)) { "请先完成账号登录" }.password
-        ensurePlatformSession(password, requestCode)
+        loginPlatform(password, requestCode)
         val entry = ACTIVITY_ENTRY.toHttpUrl()
         val page = followRedirects(execute(accountClient, request(ACTIVITY_ENTRY).build()))
         page.requireSuccess("活动授权失败")
@@ -535,9 +487,6 @@ class NbuApiService(
         val deviceStatus: String?,
         val deviceExceptionMsg: String?,
         val sessionToken: String?,
-        val userId: String?,
-        val tgc: String?,
-        val tgcStatus: String?,
         val msgTip: String?
     )
     private data class ReAuthTypeResponse(val code: Int?, val message: String?)

@@ -8,7 +8,6 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.example.nbu.model.BrowserProfile
 import com.example.nbu.model.DeviceProfile
-import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.User
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -39,7 +38,6 @@ class UserManager(context: Context) {
         
         private const val KEY_PREFIX_DEVICE = "device_"
         private const val KEY_PREFIX_BROWSER = "browser_"
-        private const val KEY_PREFIX_PLATFORM = "platform_"
         private const val KEY_PREFIX_COOKIES = "cookies_"
         private const val KEY_DEVICE_ID = "device_id"
         private const val SESSION_EXPIRE_TIME = 24 * 60 * 60 * 1000L
@@ -68,9 +66,7 @@ class UserManager(context: Context) {
         val existingIndex = users.indexOfFirst { it.username == user.username }
         
         if (existingIndex >= 0) {
-            if (users[existingIndex].deviceId != user.deviceId &&
-                (user.deviceId == null || getPlatformSession(user.username)?.deviceId != user.deviceId)) {
-                clearPlatformSession(user.username)
+            if (users[existingIndex].deviceId != user.deviceId) {
                 saveCookies(user.username, getCookies(user.username).filterNot {
                     it.name in setOf("sessionToken", "MOD_AUTH_CAS")
                 })
@@ -93,7 +89,6 @@ class UserManager(context: Context) {
         
         // 同时清除该用户的 Session 缓存
         clearSession(username)
-        clearPlatformSession(username)
         prefs.edit { remove(KEY_PREFIX_COOKIES + username) }
     }
     
@@ -144,7 +139,6 @@ class UserManager(context: Context) {
         saveUser(user)
         saveBrowserProfile(user.username, account.browser)
         saveDeviceProfile(user.username, account.device)
-        savePlatformSession(user.username, account.session)
         return user
     }
 
@@ -174,22 +168,8 @@ class UserManager(context: Context) {
 
     fun clearAuthentication(username: String) {
         clearSession(username)
-        clearPlatformSession(username)
         val names = setOf("sessionToken", "CASTGC", "AUTHTGC", "JSESSIONID", "MOD_AUTH_CAS")
         saveCookies(username, getCookies(username).filterNot { it.name in names })
-    }
-
-    fun getPlatformSession(username: String): PlatformSession? {
-        val json = prefs.getString(KEY_PREFIX_PLATFORM + username, null) ?: return null
-        return gson.fromJson(json, PlatformSession::class.java)
-    }
-
-    fun savePlatformSession(username: String, session: PlatformSession) {
-        prefs.edit { putString(KEY_PREFIX_PLATFORM + username, gson.toJson(session)) }
-    }
-
-    fun clearPlatformSession(username: String) {
-        prefs.edit { remove(KEY_PREFIX_PLATFORM + username) }
     }
 
     fun getCookies(username: String): List<Cookie> {

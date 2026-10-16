@@ -34,12 +34,7 @@
     <string name="share_account">分享账号</string>
     <string name="account_code">账号分享二维码</string>
     <string name="account_scan_prompt">扫描分享的账号二维码</string>
-    <string name="invalid_account_code">账号二维码无效或缺少登录状态，请由分享端重新生成</string>
-    <string name="account_checking">检测中…</string>
-    <string name="account_available">可用</string>
-    <string name="account_login_required">需重新登录</string>
-    <string name="account_reshare_required">需重新分享</string>
-    <string name="account_check_failed">检测失败</string>
+    <string name="invalid_account_code">账号二维码无效或缺少设备、浏览器资料</string>
     <string name="account_added">账号已添加</string>
     <string name="close">关闭</string>
     <string name="sign_title">签到</string>
