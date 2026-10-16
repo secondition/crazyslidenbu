@@ -26,6 +26,7 @@
     <string name="scan_prompt">将活动二维码放入框内</string>
     <string name="activity_submitting">正在提交</string>
     <string name="activity_failed">操作未完成</string>
+    <string name="activity_auth_required">尚未取得有效的活动授权</string>
     <string name="torch_on">打开补光</string>
     <string name="torch_off">关闭补光</string>
     <string name="camera_permission">需要相机权限才能扫码</string>

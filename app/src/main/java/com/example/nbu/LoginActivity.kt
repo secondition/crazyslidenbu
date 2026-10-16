@@ -71,7 +71,6 @@ class LoginActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.account_added, Toast.LENGTH_SHORT).show()
     }
 
-    private var loginPending = false
     private val photoPermission: String
         get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
             else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -80,7 +79,6 @@ class LoginActivity : AppCompatActivity() {
         if (grants[photoPermission] == true) {
             readLocalDevice()
         } else {
-            loginPending = false
             setLoadingState(false)
             showError(getString(R.string.device_permission))
             if (userManager.getAllUsers().isEmpty()) showUserManagementDialog()
@@ -99,7 +97,9 @@ class LoginActivity : AppCompatActivity() {
         
         setupViews()
         loadLastLogin()
-        if (savedInstanceState == null && userManager.getLocalDeviceId() == null && userManager.getAllUsers().isEmpty()) {
+        val users = userManager.getAllUsers()
+        if (savedInstanceState == null && userManager.getLocalDeviceId() == null &&
+            (users.isEmpty() || users.any { it.deviceId == null })) {
             requestDeviceAccess()
         }
     }
@@ -123,24 +123,13 @@ class LoginActivity : AppCompatActivity() {
             try {
                 val deviceId = withContext(Dispatchers.IO) { userManager.readDeviceId() }
                 binding.tvStatus.setText(if (deviceId == null) R.string.device_missing else R.string.device_detected)
-                if (deviceId == null) {
-                    loginPending = false
-                    if (userManager.getAllUsers().isEmpty()) showUserManagementDialog()
-                    return@launch
-                }
+                if (deviceId == null && userManager.getAllUsers().isEmpty()) showUserManagementDialog()
             } catch (e: CancellationException) {
-                loginPending = false
                 throw e
             } catch (e: Exception) {
-                loginPending = false
                 showError(e.message ?: "读取共享设备标识失败")
-                return@launch
             } finally {
                 setLoadingState(false)
-            }
-            if (loginPending) {
-                loginPending = false
-                performLogin()
             }
         }
     }
@@ -262,7 +251,7 @@ class LoginActivity : AppCompatActivity() {
                 }
                 
                 btnShare.visibility = if (user.local && user.deviceId == userManager.getLocalDeviceId() &&
-                    userManager.getPlatformSession(user.username) != null) View.VISIBLE else View.GONE
+                    userManager.getCachedSession(user.username) != null) View.VISIBLE else View.GONE
                 btnShare.setOnClickListener { showAccountCode(user) }
 
                 btnEdit.setOnClickListener {
@@ -317,7 +306,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun showAccountCode(user: User, onClose: (() -> Unit)? = null) {
         if (!user.local || user.deviceId != userManager.getLocalDeviceId() ||
-            userManager.getPlatformSession(user.username) == null) return
+            userManager.getCachedSession(user.username) == null) return
         val dialogBinding = DialogAccountCodeBinding.inflate(layoutInflater)
         dialogBinding.tvAccountName.text = user.displayName
         val code = AccountCode.encode(user)
@@ -350,22 +339,15 @@ class LoginActivity : AppCompatActivity() {
             binding.tilPassword.error = null
         }
         
-        if (userManager.getDeviceId(username) == null) {
-            loginPending = true
-            requestDeviceAccess()
-            return
-        }
-
         setLoadingState(true, "正在登录...")
         lifecycleScope.launch {
             try {
                 val existingUser = userManager.getUser(username)
-                if (existingUser?.password != password) userManager.clearAuthentication(username)
                 val apiService = NbuApiService(username, userManager)
                 val session = apiService.login(password, ::requestVerificationCode).getOrThrow()
-                val deviceId = requireNotNull(userManager.getDeviceId(username))
+                val deviceId = userManager.getDeviceId(username)
                 val user = User(username, password, existingUser?.remark.orEmpty(), deviceId,
-                    local = deviceId == userManager.getLocalDeviceId() &&
+                    local = deviceId != null && deviceId == userManager.getLocalDeviceId() &&
                         (existingUser == null || existingUser.local || existingUser.deviceId == null))
                 userManager.saveUser(user)
                 userManager.saveLastLogin(username, password)

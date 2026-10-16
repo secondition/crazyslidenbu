@@ -84,17 +84,37 @@ class NbuApiService(private val username: String, private val userManager: UserM
         password: String,
         requestCode: suspend (String) -> String?
     ): Result<String> = result {
-        requireNotNull(userManager.getDeviceId(username)) { "未识别到账号的设备标识" }
-        ensurePlatformSession(password, requestCode)
+        if (userManager.getUser(username)?.password != password) {
+            userManager.clearSession(username)
+            for (url in listOf(AUTH_URL, SERVICE_URL)) {
+                cookies.loadForRequest(url.toHttpUrl()).filter {
+                    it.name in listOf("CASTGC", "AUTHTGC", "JSESSIONID")
+                }.forEach { cookies.remove(it.name, it.domain) }
+            }
+            userManager.saveCookies(username, cookies.snapshot())
+        }
         val cached = userManager.getCachedSession(username)
         if (cached != null && validateSession(cached)) return@result cached
         userManager.clearSession(username)
-        restoreTgc(requireNotNull(platform).tgc)
-        val page = followRedirects(execute(accountClient, request(SERVICE_URL).build()))
-        page.requireSuccess("获取考勤页面失败")
+        val loginUrl = LOGIN_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("service", SERVICE_URL)
+            .build()
+        val loginRequest = request(loginUrl.toString()).build()
+        var page = followRedirects(execute(accountClient, loginRequest))
+        if (page.url.host == loginUrl.host && page.url.encodedPath == loginUrl.encodedPath) {
+            val response = submitPassword(page, password, request(page.url.toString()).build())
+            check(response.isRedirect) {
+                parseLoginError(response.text) ?: "登录失败，请检查账号密码或验证码要求（HTTP ${response.code}）"
+            }
+            page = followRedirects(response)
+        }
+        if (page.url.encodedPath == "/authserver/reAuthCheck/reAuthLoginView.do") {
+            page = followRedirects(authenticateDevice(page, loginRequest, requestCode))
+        }
+        page.requireSuccess("登录跳转失败")
         val jsessionId = cookies.getJSessionId(SERVICE_URL.toHttpUrl())
-            ?: error("未取得考勤登录会话")
-        check(validateSession(jsessionId)) { "考勤账号校验失败" }
+            ?: error(parseLoginError(page.text) ?: "登录未完成，未获取到考勤会话")
+        check(validateSession(jsessionId)) { parseLoginError(page.text) ?: "登录未完成，账号校验失败" }
         userManager.saveSession(username, jsessionId)
         jsessionId
     }
@@ -166,33 +186,13 @@ class NbuApiService(private val username: String, private val userManager: UserM
                     page = execute(accountClient, request(target.toString()).header("CpdailyAuthType", "Login").build())
                 }
                 page.url.encodedPath == "/authserver/reAuthCheck/reAuthLoginView.do" -> {
-                    page = authenticateDevice(page, loginUrl ?: error("认证页面缺少登录入口"), requestCode)
+                    val resumeRequest = request((loginUrl ?: error("认证页面缺少登录入口")).toString())
+                        .header("CpdailyAuthType", "Login").build()
+                    page = authenticateDevice(page, resumeRequest, requestCode)
                 }
                 page.url.encodedPath == "/authserver/login" && !submitted -> {
-                    page.requireSuccess("获取登录页面失败")
-                    val salt = capture(page.text, """id="pwdEncryptSalt"\s+value="([^"]*)"""")
-                        ?: error(parseLoginError(page.text) ?: "登录页缺少 pwdEncryptSalt")
-                    val execution = capture(page.text, """name="execution"\s+value="([^"]*)"""")
-                        ?: error("登录页缺少 execution")
-                    val eventId = capture(page.text, """id="_eventId"\s+name="_eventId"\s+value="([^"]*)"""") ?: "submit"
-                    val cllt = capture(page.text, """id="pwdLoginDiv"[\s\S]*?id="cllt"\s+name="cllt"\s+value="([^"]*)"""") ?: "userNameLogin"
-                    val dllt = capture(page.text, """id="dllt"\s+name="dllt"\s+value="([^"]*)"""") ?: "generalLogin"
-                    val fingerprintUrl = "${AUTH_URL}bfp/info".toHttpUrl().newBuilder()
-                        .addQueryParameter("bfp", browser.fingerprint).build()
-                    execute(accountClient, request(fingerprintUrl.toString())
-                        .header("X-Requested-With", "XMLHttpRequest").build()).requireSuccess("设置设备指纹失败")
-                    val form = FormBody.Builder()
-                        .add("username", username)
-                        .add("password", encryptPassword(password, salt))
-                        .add("captcha", "")
-                        .add("_eventId", eventId)
-                        .add("cllt", cllt)
-                        .add("dllt", dllt)
-                        .add("lt", "")
-                        .add("execution", execution)
-                        .build()
                     submitted = true
-                    page = execute(accountClient, request(page.url.toString()).header("CpdailyAuthType", "Login").post(form).build())
+                    page = submitPassword(page, password, request(page.url.toString()).header("CpdailyAuthType", "Login").build())
                 }
                 else -> error(parseLoginError(page.text) ?: "移动端登录未完成（HTTP ${page.code}）")
             }
@@ -265,13 +265,39 @@ class NbuApiService(private val username: String, private val userManager: UserM
         return data.data ?: error("平台响应缺少数据")
     }
 
+    private suspend fun submitPassword(page: HttpResponse, password: String, loginRequest: Request): HttpResponse {
+        page.requireSuccess("获取登录页面失败")
+        val salt = capture(page.text, """id="pwdEncryptSalt"\s+value="([^"]*)"""")
+            ?: error(parseLoginError(page.text) ?: "登录页缺少 pwdEncryptSalt")
+        val execution = capture(page.text, """name="execution"\s+value="([^"]*)"""")
+            ?: error("登录页缺少 execution")
+        val eventId = capture(page.text, """id="_eventId"\s+name="_eventId"\s+value="([^"]*)"""") ?: "submit"
+        val cllt = capture(page.text, """id="pwdLoginDiv"[\s\S]*?id="cllt"\s+name="cllt"\s+value="([^"]*)"""") ?: "userNameLogin"
+        val dllt = capture(page.text, """id="dllt"\s+name="dllt"\s+value="([^"]*)"""") ?: "generalLogin"
+        val fingerprintUrl = "${AUTH_URL}bfp/info".toHttpUrl().newBuilder()
+            .addQueryParameter("bfp", browser.fingerprint).build()
+        execute(accountClient, request(fingerprintUrl.toString())
+            .header("X-Requested-With", "XMLHttpRequest").build()).requireSuccess("设置设备指纹失败")
+        val form = FormBody.Builder()
+            .add("username", username)
+            .add("password", encryptPassword(password, salt))
+            .add("captcha", "")
+            .add("_eventId", eventId)
+            .add("cllt", cllt)
+            .add("dllt", dllt)
+            .add("lt", "")
+            .add("execution", execution)
+            .build()
+        return execute(accountClient, loginRequest.newBuilder().post(form).build())
+    }
+
     private suspend fun authenticateDevice(
         page: HttpResponse,
-        loginUrl: HttpUrl,
+        loginRequest: Request,
         requestCode: suspend (String) -> String?
     ): HttpResponse {
         page.requireSuccess("获取设备认证页面失败")
-        val service = page.url.queryParameter("service") ?: error("设备认证页面缺少服务地址")
+        val service = loginRequest.url.queryParameter("service") ?: error("设备认证页面缺少服务地址")
         val userId = capture(page.text, """"reAuthUserId"\s*:\s*"([^"]*)"""") ?: error("设备认证页面缺少用户信息")
         val multifactor = capture(page.text, """"isMultifactor"\s*:\s*"([^"]*)"""") ?: error("设备认证页面缺少认证参数")
         val authType = capture(page.text, """"reAuthType"\s*:\s*"([^"]*)"""") ?: error("设备认证页面缺少认证方式")
@@ -300,7 +326,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         check(authResponse?.code !in listOf("reAuth_failed", "reAuth_unauthorized")) {
             authResponse?.msg ?: "设备认证失败"
         }
-        return execute(accountClient, request(loginUrl.toString()).header("CpdailyAuthType", "Login").build())
+        return execute(accountClient, loginRequest)
     }
 
     private suspend fun authPost(path: String, params: Map<String, String>): HttpResponse {
@@ -381,7 +407,6 @@ class NbuApiService(private val username: String, private val userManager: UserM
     }
 
     suspend fun signActivity(code: ActivityCode): Result<String> = result {
-        if (platform == null) throw SessionExpiredException()
         val entry = ACTIVITY_ENTRY.toHttpUrl()
         val page = followRedirects(execute(accountClient, request(ACTIVITY_ENTRY).build()))
         page.requireSuccess("活动授权失败")
@@ -428,7 +453,9 @@ class NbuApiService(private val username: String, private val userManager: UserM
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
-                    continuation.resumeWithException(e)
+                    continuation.resumeWithException(IOException(
+                        "${request.method} ${request.url.host}${request.url.encodedPath}：${e.message}", e
+                    ))
                 }
 
                 override fun onResponse(call: Call, response: Response) {
@@ -441,7 +468,9 @@ class NbuApiService(private val username: String, private val userManager: UserM
                             HttpResponse(it.code, it.request.url, it.header("Location"), text)
                         }
                     } catch (e: Exception) {
-                        continuation.resumeWithException(e)
+                        continuation.resumeWithException(if (e is IOException) IOException(
+                            "${request.method} ${request.url.host}${request.url.encodedPath}：${e.message}", e
+                        ) else e)
                         return
                     }
                     continuation.resume(data)

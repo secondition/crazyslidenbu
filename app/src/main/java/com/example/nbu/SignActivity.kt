@@ -249,8 +249,11 @@ class SignActivity : AppCompatActivity() {
             apiService.signActivity(code).onSuccess {
                 showActivityResult(true, it)
             }.onFailure {
-                if (it is SessionExpiredException) handleSessionExpired()
-                else showActivityResult(false, it.message ?: getString(R.string.activity_failed))
+                showActivityResult(false, if (it is SessionExpiredException) {
+                    getString(R.string.activity_auth_required)
+                } else {
+                    it.message ?: getString(R.string.activity_failed)
+                })
             }
         }
     }
