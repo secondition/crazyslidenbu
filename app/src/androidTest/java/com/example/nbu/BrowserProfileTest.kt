@@ -49,11 +49,18 @@ class BrowserProfileTest {
         assertEquals(first.deviceId, restored.getDeviceId(first.username))
         assertEquals(second.deviceId, restored.getDeviceId(second.username))
         manager.saveSession(first.username, "course")
-        manager.savePlatformSession(first.username, PlatformSession("token", "user", "tgc", "ids", "3"))
+        manager.savePlatformSession(first.username, PlatformSession("token", "user", "tgc", "ids", "3", requireNotNull(first.deviceId)))
         val rebound = first.copy(deviceId = UUID.randomUUID().toString())
         manager.saveUser(rebound)
         assertEquals(rebound.deviceId, restored.getDeviceId(first.username))
         assertNull(restored.getPlatformSession(first.username))
         assertEquals("course", restored.getCachedSession(first.username))
+
+        val bound = ordinary.copy(deviceId = UUID.randomUUID().toString(), local = true)
+        val session = PlatformSession("token", "user", "tgc", "ids", "3", requireNotNull(bound.deviceId))
+        manager.savePlatformSession(bound.username, session)
+        manager.saveUser(bound)
+        assertEquals(bound, restored.getUser(bound.username))
+        assertEquals(session, restored.getPlatformSession(bound.username))
     }
 }

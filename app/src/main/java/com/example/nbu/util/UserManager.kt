@@ -64,7 +64,8 @@ class UserManager(context: Context) {
         val existingIndex = users.indexOfFirst { it.username == user.username }
         
         if (existingIndex >= 0) {
-            if (users[existingIndex].deviceId != user.deviceId) {
+            if (users[existingIndex].deviceId != user.deviceId &&
+                (user.deviceId == null || getPlatformSession(user.username)?.deviceId != user.deviceId)) {
                 clearPlatformSession(user.username)
                 saveCookies(user.username, getCookies(user.username).filterNot {
                     it.name in setOf("sessionToken", "MOD_AUTH_CAS")

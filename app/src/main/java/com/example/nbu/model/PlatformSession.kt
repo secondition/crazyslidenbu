@@ -5,5 +5,6 @@ data class PlatformSession(
     val userId: String,
     val tgc: String,
     val idsToken: String,
-    val deviceType: String
+    val deviceType: String,
+    val deviceId: String
 )

@@ -370,7 +370,7 @@ class LoginActivity : AppCompatActivity() {
         validation = lifecycleScope.launch {
             try {
                 if (existing == null) {
-                    NbuApiService(username, userManager).login(password) { message ->
+                    NbuApiService(username, userManager, user.deviceId).login(password) { message ->
                         requestVerificationCode(message, editor.root, binding.verification)
                     }.getOrThrow()
                 } else if (existing.password != password) userManager.clearAuthentication(username)
