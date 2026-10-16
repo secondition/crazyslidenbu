@@ -32,8 +32,10 @@ class LoginGestureTest {
                     GeneralLocation.translate(GeneralLocation.CENTER, x * 0.5f, y * 0.5f),
                     Press.FINGER
                 )
-                onView(withId(R.id.tvTitle)).perform(swipe)
-                assertEquals(1L, opened.count)
+                repeat(3) {
+                    onView(withId(R.id.tvTitle)).perform(swipe)
+                    assertEquals(1L, opened.count)
+                }
                 onView(withId(R.id.tvTitle)).perform(swipe)
                 assertTrue(opened.await(2, TimeUnit.SECONDS))
                 it.onActivity { activity ->

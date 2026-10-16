@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.example.nbu.databinding.ActivityLoginBinding
 import com.example.nbu.databinding.DialogAddUserBinding
@@ -44,6 +45,7 @@ class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
     private lateinit var userManager: UserManager
+    private var selectedUser: User? = null
     
     // 用于启动 SignActivity
     private val signActivityLauncher = registerForActivityResult(
@@ -64,8 +66,7 @@ class LoginActivity : AppCompatActivity() {
         }
         val user = received.copy(remark = existing?.remark.orEmpty())
         userManager.saveUser(user)
-        binding.etUsername.setText(user.username)
-        binding.etPassword.setText(user.password)
+        fillAccount(user)
         binding.tvStatus.visibility = View.GONE
         Toast.makeText(this, R.string.account_added, Toast.LENGTH_SHORT).show()
     }
@@ -132,6 +133,12 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun setupViews() {
+        binding.etUsername.doAfterTextChanged {
+            if (selectedUser != null && it.toString() != selectedUser?.username) {
+                selectedUser = null
+                binding.tilPassword.visibility = View.VISIBLE
+            }
+        }
         // 登录按钮
         binding.btnLogin.setOnClickListener {
             hideKeyboard()
@@ -158,7 +165,8 @@ class LoginActivity : AppCompatActivity() {
         val adding = existingUser == null
         if (existingUser != null) {
             dialogBinding.etUsername.setText(existingUser.username)
-            dialogBinding.etPassword.setText(existingUser.password)
+            if (existingUser.local) dialogBinding.etPassword.setText(existingUser.password)
+            else dialogBinding.tilPassword.visibility = View.GONE
             dialogBinding.etRemark.setText(existingUser.remark)
             dialogBinding.etUsername.isEnabled = false
         } else {
@@ -175,7 +183,8 @@ class LoginActivity : AppCompatActivity() {
         dialogBinding.btnCancel.setOnClickListener { dialog.dismiss() }
         dialogBinding.btnSave.setOnClickListener {
             val username = dialogBinding.etUsername.text?.toString()?.trim().orEmpty()
-            val password = dialogBinding.etPassword.text?.toString().orEmpty()
+            val password = if (existingUser != null && !existingUser.local) existingUser.password
+                else dialogBinding.etPassword.text?.toString().orEmpty()
             val remark = dialogBinding.etRemark.text?.toString()?.trim().orEmpty()
             if (username.isEmpty()) {
                 dialogBinding.tilUsername.error = "请输入学号"
@@ -204,8 +213,7 @@ class LoginActivity : AppCompatActivity() {
                     }
                     userManager.saveUser(user)
                     if (!adding) {
-                        binding.etUsername.setText(username)
-                        binding.etPassword.setText(password)
+                        fillAccount(user)
                     }
                     validation = null
                     dialog.dismiss()
@@ -242,6 +250,7 @@ class LoginActivity : AppCompatActivity() {
         fun refreshList() {
             dialogBinding.llUserList.removeAllViews()
             val users = userManager.getAllUsers()
+            dialogBinding.btnAddLocal.visibility = if (users.any { it.local }) View.GONE else View.VISIBLE
             
             if (users.isEmpty()) {
                 val emptyView = TextView(this).apply {
@@ -285,6 +294,12 @@ class LoginActivity : AppCompatActivity() {
                         .setBackground(resources.getDrawable(R.drawable.bg_dialog_rounded, null))
                         .setPositiveButton("删除") { _, _ ->
                             userManager.deleteUser(user.username)
+                            if (selectedUser?.username == user.username) {
+                                selectedUser = null
+                                binding.etUsername.text?.clear()
+                                binding.etPassword.text?.clear()
+                                binding.tilPassword.visibility = View.VISIBLE
+                            }
                             refreshList()
                         }
                         .setNegativeButton("取消", null)
@@ -293,8 +308,7 @@ class LoginActivity : AppCompatActivity() {
                 
                 // 点击整个列表项直接登录该账户
                 itemView.setOnClickListener {
-                    binding.etUsername.setText(user.username)
-                    binding.etPassword.setText(user.password)
+                    fillAccount(user)
                     dialog.dismiss()
                     performLogin()
                 }
@@ -344,7 +358,8 @@ class LoginActivity : AppCompatActivity() {
     private fun performLogin() {
         if (!binding.btnLogin.isEnabled) return
         val username = binding.etUsername.text?.toString()?.trim() ?: ""
-        val password = binding.etPassword.text?.toString() ?: ""
+        val password = selectedUser?.takeIf { it.username == username }?.password
+            ?: binding.etPassword.text?.toString().orEmpty()
 
         // 验证输入
         if (username.isEmpty()) {
@@ -420,14 +435,22 @@ class LoginActivity : AppCompatActivity() {
         }
     }
     
+    private fun fillAccount(user: User) {
+        binding.etUsername.setText(user.username)
+        binding.etPassword.setText(if (user.local) user.password else "")
+        binding.tilPassword.visibility = if (user.local) View.VISIBLE else View.GONE
+        selectedUser = user.takeUnless { it.local }
+    }
+
     /**
      * 加载上次登录的账号密码
      */
     private fun loadLastLogin() {
         val lastLogin = userManager.getLastLogin()
         if (lastLogin != null) {
-            binding.etUsername.setText(lastLogin.first)
-            binding.etPassword.setText(lastLogin.second)
+            val user = userManager.getUser(lastLogin.first)
+            if (user != null) fillAccount(user)
+            else binding.etUsername.setText(lastLogin.first)
         }
     }
 

@@ -44,7 +44,7 @@ class LoginTitle(context: Context, attrs: AttributeSet?) : AppCompatTextView(con
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             parent.requestDisallowInterceptTouchEvent(false)
         }
-        if (swipeCount >= 2) performClick()
+        if (swipeCount >= 4) performClick()
         return handled
     }
 
