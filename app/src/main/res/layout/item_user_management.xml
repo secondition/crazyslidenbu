@@ -33,13 +33,13 @@
 
     <ImageView
         android:id="@+id/btnShare"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:padding="12dp"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:padding="8dp"
         android:src="@android:drawable/ic_menu_share"
         android:contentDescription="@string/share_account"
         android:background="?attr/selectableItemBackgroundBorderless"
-        app:tint="@color/brand_primary"
+        app:tint="@color/text_secondary"
         xmlns:app="http://schemas.android.com/apk/res-auto"/>
 
     <ImageView
@@ -47,6 +47,7 @@
         android:layout_width="36dp"
         android:layout_height="36dp"
         android:padding="8dp"
+        android:layout_marginStart="8dp"
         android:src="@drawable/ic_edit"
         android:background="?attr/selectableItemBackgroundBorderless"
         app:tint="@color/text_secondary"

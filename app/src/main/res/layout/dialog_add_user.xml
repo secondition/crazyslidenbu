@@ -32,7 +32,7 @@
             android:textColorHint="@color/text_secondary"
             app:boxStrokeColor="@color/brand_primary"
             app:hintTextColor="@color/brand_primary"
-            app:startIconDrawable="@drawable/ic_accessibility"
+            app:startIconDrawable="@drawable/ic_user_alien"
             app:startIconTint="@color/text_secondary">
 
             <com.google.android.material.textfield.TextInputEditText

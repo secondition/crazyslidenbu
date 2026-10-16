@@ -116,7 +116,7 @@
                             android:layout_height="48dp"
                             android:layout_gravity="start|center_vertical"
                             android:padding="12dp"
-                            android:src="@drawable/ic_accessibility"
+                            android:src="@drawable/ic_user_alien"
                             android:contentDescription="@string/clear_student_id"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             android:clickable="true"
@@ -171,13 +171,16 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnLogin"
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="56dp"
+                        android:layout_gravity="center_horizontal"
                         android:layout_marginTop="24dp"
-                        android:text="登 录"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="@android:color/white"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="32dp"
+                        android:contentDescription="@string/log_in"
+                        app:icon="@drawable/ic_accessibility"
+                        app:iconPadding="0dp"
+                        app:iconTint="@color/on_primary"
                         app:cornerRadius="8dp"
                         app:backgroundTint="@color/brand_primary"/>
 
