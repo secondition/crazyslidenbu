@@ -5,8 +5,6 @@
     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingHorizontal="24dp"
-    android:paddingTop="8dp"
     android:hint="@string/verification_code"
     app:boxStrokeColor="@color/brand_primary">
 

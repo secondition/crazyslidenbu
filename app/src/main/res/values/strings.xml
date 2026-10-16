@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">疯滑宁大 Pro</string>
     <string name="verification_code">验证码</string>
+    <string name="verify">验证</string>
+    <string name="back_to_account">返回账户</string>
+    <string name="verification_required">请输入风华宁大验证码</string>
     <string name="title_prefix">疯滑</string>
     <string name="title_nbu">宁大</string>
     <string name="disclaimer">仅供快捷签到与学习，使用责任自负。</string>

@@ -207,7 +207,9 @@ class LoginActivity : AppCompatActivity() {
             validation = lifecycleScope.launch {
                 try {
                     if (adding) {
-                        NbuApiService(username, userManager).login(password, ::requestVerificationCode).getOrThrow()
+                        NbuApiService(username, userManager).login(password) { message ->
+                            requestVerificationCode(message, dialogBinding.credentials, dialogBinding.verification)
+                        }.getOrThrow()
                     } else if (existingUser?.password != password) {
                         userManager.clearAuthentication(username)
                     }
@@ -381,7 +383,9 @@ class LoginActivity : AppCompatActivity() {
             try {
                 val existingUser = userManager.getUser(username)
                 val apiService = NbuApiService(username, userManager)
-                val session = apiService.login(password, ::requestVerificationCode).getOrThrow()
+                val session = apiService.login(password) { message ->
+                    requestVerificationCode(message, binding.credentials, binding.verification)
+                }.getOrThrow()
                 val user = existingUser?.copy(password = password) ?: User(username, password)
                 userManager.saveUser(user)
                 userManager.saveLastLogin(username, password)
