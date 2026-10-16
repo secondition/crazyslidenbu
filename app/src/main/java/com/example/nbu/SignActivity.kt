@@ -55,7 +55,7 @@ class SignActivity : AppCompatActivity() {
             return@registerForActivityResult
         }
         startActivity(Intent(this, WebActivity::class.java)
-            .putExtra(WebActivity.EXTRA_USERNAME, users.first().username)
+            .putStringArrayListExtra(WebActivity.EXTRA_USERNAMES, ArrayList(users.map { it.username }))
             .putExtra(WebActivity.EXTRA_URL, code.url))
     }
 

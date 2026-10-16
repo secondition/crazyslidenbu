@@ -67,4 +67,10 @@
     <string name="group_signing">正在为 %1$s 签到（%2$d/%3$d）…</string>
     <string name="no_matching_course">无此课程</string>
     <string name="sign_failed">失败：%1$s</string>
+    <string name="group_activity_authorizing">正在为 %1$s 授权活动页面（%2$d/%3$d）…</string>
+    <string name="activity_processing">处理中</string>
+    <string name="activity_waiting">等待处理</string>
+    <string name="activity_no_result">活动页面未返回签到结果</string>
+    <string name="activity_interrupted">操作中断，结果待确认</string>
+    <string name="group_activity_complete">本组活动操作已处理，详情见各账户结果</string>
 </resources>
