@@ -462,13 +462,17 @@ class LoginActivity : AppCompatActivity() {
             return
         }
         binding.tilUsername.error = null
+        val existing = userManager.getUser(username)
+        if (existing?.deviceId == null) {
+            openCampusApp()
+            return
+        }
         if (password.isEmpty()) {
             binding.tilPassword.error = getString(R.string.password_required)
             return
         }
         binding.tilPassword.error = null
-        val existing = userManager.getUser(username)
-        authenticateAccounts(listOf(existing?.copy(password = password) ?: User(username, password)))
+        authenticateAccounts(listOf(existing.copy(password = password)))
     }
 
     private fun authenticateAccounts(users: List<User>) {
@@ -485,8 +489,7 @@ class LoginActivity : AppCompatActivity() {
                     val result = NbuApiService(user.username, userManager).login(user.password) { message ->
                         requestVerificationCode("${user.displayName}\n$message", content, binding.verification)
                     }
-                    result.onSuccess { userManager.saveUser(user) }
-                        .onFailure { failures.add("${user.displayName}：${it.message}") }
+                    result.onFailure { failures.add("${user.displayName}：${it.message}") }
                 }
                 if (failures.isNotEmpty()) {
                     showError(failures.joinToString("\n"))
