@@ -18,13 +18,13 @@
         android:layout_marginBottom="16dp"/>
 
     <LinearLayout
-        android:id="@+id/credentials"
+        android:id="@+id/accountFields"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
         <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilUsername"
+            android:id="@+id/tilAccountUsername"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -36,7 +36,7 @@
             app:startIconTint="@color/text_secondary">
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etUsername"
+                android:id="@+id/etAccountUsername"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="number"
@@ -46,7 +46,7 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilPassword"
+            android:id="@+id/tilAccountPassword"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -61,7 +61,7 @@
             app:endIconTint="@color/text_secondary">
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etPassword"
+                android:id="@+id/etAccountPassword"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="textPassword"
@@ -93,7 +93,7 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <TextView
-            android:id="@+id/tvStatus"
+            android:id="@+id/tvEditStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
@@ -110,7 +110,7 @@
             android:layout_marginTop="24dp">
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnCancel"
+                android:id="@+id/btnCancelEdit"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -128,9 +128,5 @@
         </LinearLayout>
 
     </LinearLayout>
-
-    <include
-        android:id="@+id/verification"
-        layout="@layout/view_verification"/>
 
 </LinearLayout>

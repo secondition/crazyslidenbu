@@ -4,15 +4,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
-    android:clipChildren="false"
-    android:clipToPadding="false"
     android:background="@color/bg_light">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:clipChildren="false"
-        android:clipToPadding="false">
+        android:layout_height="wrap_content">
 
         <!-- 顶部 Header 背景 -->
         <View
@@ -20,37 +16,18 @@
             android:layout_width="match_parent"
             android:layout_height="280dp"
             android:background="@color/brand_primary"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent"/>
 
-        <!-- 标题区域 -->
-        <LinearLayout
-            android:id="@+id/titleGroup"
+        <TextView
+            android:id="@+id/tvTitle"
+            style="@style/LoginTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:elevation="16dp"
-            android:clipChildren="false"
-            android:clipToPadding="false"
             android:layout_marginTop="64dp"
-            app:layout_constraintEnd_toEndOf="parent"
+            android:text="@string/login_title"
+            app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
-
-            <TextView
-                android:id="@+id/tvTitlePrefix"
-                style="@style/LoginTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/title_prefix" />
-
-            <com.example.nbu.view.LoginTitle
-                android:id="@+id/tvTitle"
-                style="@style/LoginTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/title_nbu" />
-
-        </LinearLayout>
+            app:layout_constraintEnd_toEndOf="parent"/>
 
         <TextView
             android:id="@+id/tvSubtitle"
@@ -62,9 +39,9 @@
             android:fontFamily="serif"
             android:textColor="#CCFFFFFF"
             android:layout_marginTop="8dp"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvTitle"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/titleGroup" />
+            app:layout_constraintEnd_toEndOf="parent"/>
 
         <!-- 登录卡片 -->
         <com.google.android.material.card.MaterialCardView
@@ -77,75 +54,111 @@
             app:cardCornerRadius="16dp"
             app:cardElevation="8dp"
             app:cardBackgroundColor="@android:color/white"
-            app:layout_constraintTop_toBottomOf="@+id/tvSubtitle"
+            app:layout_constraintTop_toBottomOf="@id/tvSubtitle"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toTopOf="@+id/tvDisclaimer"
+            app:layout_constraintBottom_toTopOf="@id/tvDisclaimer"
             app:layout_constraintVertical_bias="0.0">
 
-            <LinearLayout
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="32dp">
+                android:layout_height="wrap_content">
 
                 <LinearLayout
                     android:id="@+id/credentials"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:padding="32dp">
 
-                    <!-- 用户名输入框 -->
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilUsername"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    <FrameLayout
+                        android:id="@+id/usernameField"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="16dp"
-                        android:hint="学号"
-                        android:textColorHint="@color/text_secondary"
-                        app:boxStrokeColor="@color/brand_primary"
-                        app:hintTextColor="@color/brand_primary"
-                        app:startIconDrawable="@drawable/ic_accessibility"
-                        app:startIconTint="@color/text_secondary">
+                        android:layout_marginBottom="16dp">
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etUsername"
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/tilUsername"
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="text"
-                            android:maxLines="1"
-                            android:textColor="@color/text_primary"
-                            android:imeOptions="actionNext" />
+                            android:hint="@string/student_id"
+                            android:textColorHint="@color/text_secondary"
+                            app:boxStrokeColor="@color/brand_primary"
+                            app:hintTextColor="@color/brand_primary">
 
-                    </com.google.android.material.textfield.TextInputLayout>
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etUsername"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="text"
+                                android:maxLines="1"
+                                android:paddingStart="56dp"
+                                android:paddingEnd="16dp"
+                                android:textColor="@color/text_primary"
+                                android:imeOptions="actionNext"/>
 
-                    <!-- 密码输入框 -->
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilPassword"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.example.nbu.view.InputSlider
+                            android:id="@+id/usernameSlider"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_gravity="start|center_vertical"
+                            android:padding="12dp"
+                            android:src="@drawable/ic_accessibility"
+                            android:contentDescription="@string/clear_student_id"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true"
+                            app:tint="@color/text_secondary"/>
+
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:id="@+id/passwordField"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="密码"
-                        android:textColorHint="@color/text_secondary"
-                        app:boxStrokeColor="@color/brand_primary"
-                        app:hintTextColor="@color/brand_primary"
-                        app:startIconDrawable="@drawable/ic_password_key"
-                        app:startIconTint="@color/text_secondary"
                         android:layout_marginBottom="8dp">
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etPassword"
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/tilPassword"
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textPassword"
-                            android:maxLines="1"
-                            android:textColor="@color/text_primary"
-                            android:imeOptions="actionDone" />
+                            android:hint="@string/password"
+                            android:textColorHint="@color/text_secondary"
+                            app:boxStrokeColor="@color/brand_primary"
+                            app:hintTextColor="@color/brand_primary">
 
-                    </com.google.android.material.textfield.TextInputLayout>
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etPassword"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="textPassword"
+                                android:maxLines="1"
+                                android:paddingStart="56dp"
+                                android:paddingEnd="16dp"
+                                android:textColor="@color/text_primary"
+                                android:imeOptions="actionDone"/>
 
-                    <!-- 登录按钮 -->
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.example.nbu.view.InputSlider
+                            android:id="@+id/passwordSlider"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_gravity="start|center_vertical"
+                            android:padding="12dp"
+                            android:src="@drawable/ic_password_key"
+                            android:contentDescription="@string/clear_password"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true"
+                            app:tint="@color/text_secondary"/>
+
+                    </FrameLayout>
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnLogin"
                         android:layout_width="match_parent"
@@ -156,9 +169,8 @@
                         android:textStyle="bold"
                         android:textColor="@android:color/white"
                         app:cornerRadius="8dp"
-                        app:backgroundTint="@color/brand_primary" />
+                        app:backgroundTint="@color/brand_primary"/>
 
-                    <!-- 加载进度 -->
                     <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/progressBar"
                         android:layout_width="wrap_content"
@@ -167,26 +179,47 @@
                         android:layout_marginTop="24dp"
                         android:indeterminate="true"
                         android:visibility="gone"
-                        app:indicatorColor="@color/brand_primary" />
+                        app:indicatorColor="@color/brand_primary"/>
 
-                    <!-- 状态提示 -->
                     <TextView
                         android:id="@+id/tvStatus"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="center_horizontal"
                         android:layout_marginTop="16dp"
                         android:textSize="14sp"
                         android:textColor="@color/text_secondary"
-                        android:visibility="gone" />
+                        android:visibility="gone"/>
 
                 </LinearLayout>
 
                 <include
                     android:id="@+id/verification"
-                    layout="@layout/view_verification"/>
+                    layout="@layout/view_verification"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="32dp"/>
 
-            </LinearLayout>
+                <include
+                    android:id="@+id/accounts"
+                    layout="@layout/dialog_user_management"
+                    android:visibility="gone"/>
+
+                <include
+                    android:id="@+id/editor"
+                    layout="@layout/dialog_add_user"
+                    android:visibility="gone"/>
+
+                <include
+                    android:id="@+id/share"
+                    layout="@layout/dialog_account_code"
+                    android:visibility="gone"/>
+
+                <include
+                    android:id="@+id/removal"
+                    layout="@layout/view_remove_account"
+                    android:visibility="gone"/>
+
+            </FrameLayout>
 
         </com.google.android.material.card.MaterialCardView>
 
@@ -202,7 +235,7 @@
             android:textColor="@color/text_secondary"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" />
+            app:layout_constraintBottom_toBottomOf="parent"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
