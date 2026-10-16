@@ -1,5 +1,8 @@
 package com.example.nbu.util
 
+import com.example.nbu.model.BrowserProfile
+import com.example.nbu.model.DeviceProfile
+import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.User
 import com.google.gson.Gson
 import java.security.SecureRandom
@@ -14,17 +17,25 @@ object AccountCode {
     private val random = SecureRandom()
     private val key = SecretKeySpec(Base64.getDecoder().decode(ACCOUNT_KEY), "AES")
 
-    fun encode(user: User): String {
+    data class Account(
+        val user: User,
+        val session: PlatformSession,
+        val browser: BrowserProfile,
+        val device: DeviceProfile
+    )
+
+    fun encode(user: User, session: PlatformSession, browser: BrowserProfile, device: DeviceProfile): String {
         require(user.local) { "仅可分享已登录的本机账号" }
-        val deviceId = requireNotNull(user.deviceId) { "账号缺少设备标识" }
-        val data = gson.toJson(Payload(user.username, user.password, deviceId)).toByteArray(Charsets.UTF_8)
+        validate(Account(user, session, browser, device))
+        val data = gson.toJson(Payload(user.username, user.password, user.deviceId, session, browser, device))
+            .toByteArray(Charsets.UTF_8)
         val nonce = ByteArray(12).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, nonce))
         return Base64.getEncoder().encodeToString(nonce + cipher.doFinal(data))
     }
 
-    fun decode(value: String): User {
+    fun decode(value: String): Account {
         val bytes = Base64.getDecoder().decode(value)
         require(bytes.size > 28) { "账号二维码内容不完整" }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -34,10 +45,33 @@ object AccountCode {
         val username = requireNotNull(data.username?.takeIf { it.isNotBlank() }) { "账号二维码缺少学号" }
         val password = requireNotNull(data.password?.takeIf { it.isNotEmpty() }) { "账号二维码缺少密码" }
         val deviceId = requireNotNull(data.deviceId) { "账号二维码缺少设备标识" }
-        require(deviceId.length == 36) { "账号二维码设备标识无效" }
-        UUID.fromString(deviceId)
-        return User(username, password, deviceId = deviceId)
+        val session = requireNotNull(data.session) { "二维码缺少登录状态，请重新生成分享码" }
+        val browser = requireNotNull(data.browser) { "二维码缺少浏览器资料" }
+        val device = requireNotNull(data.device) { "二维码缺少设备资料" }
+        return Account(User(username, password, deviceId = deviceId), session, browser, device).also(::validate)
     }
 
-    private data class Payload(val username: String?, val password: String?, val deviceId: String?)
+    private fun validate(account: Account) {
+        val deviceId = requireNotNull(account.user.deviceId) { "账号缺少设备标识" }
+        require(deviceId.length == 36) { "账号二维码设备标识无效" }
+        UUID.fromString(deviceId)
+        require(account.session.deviceType == "3" && account.session.deviceId == deviceId) { "账号与登录设备不匹配" }
+        require(listOf(account.session.sessionToken, account.session.userId, account.session.tgc, account.session.idsToken)
+            .all { !it.isNullOrBlank() }) { "账号登录状态不完整" }
+        require(!account.browser.userAgent.isNullOrBlank() && !account.browser.fingerprint.isNullOrBlank()) {
+            "账号浏览器资料不完整"
+        }
+        require(!account.device.systemVersion.isNullOrBlank() && !account.device.model.isNullOrBlank()) {
+            "账号设备资料不完整"
+        }
+    }
+
+    private data class Payload(
+        val username: String?,
+        val password: String?,
+        val deviceId: String?,
+        val session: PlatformSession?,
+        val browser: BrowserProfile?,
+        val device: DeviceProfile?
+    )
 }

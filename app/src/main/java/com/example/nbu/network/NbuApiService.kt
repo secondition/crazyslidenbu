@@ -1,11 +1,11 @@
 package com.example.nbu.network
 
 import android.net.Uri
-import android.os.Build
 import android.util.Log
 import com.example.nbu.model.ActivityCode
 import com.example.nbu.model.Course
 import com.example.nbu.model.CourseResponse
+import com.example.nbu.model.DeviceProfile
 import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.SignResult
 import com.example.nbu.util.UserManager
@@ -43,7 +43,8 @@ import kotlin.random.Random
 class NbuApiService(
     private val username: String,
     private val userManager: UserManager,
-    private val deviceId: String? = userManager.getDeviceId(username)
+    private val deviceId: String? = userManager.getDeviceId(username),
+    private val device: DeviceProfile = userManager.getDeviceProfile(username)
 ) {
 
     companion object {
@@ -114,7 +115,9 @@ class NbuApiService(
         jsessionId
     }
 
-    private suspend fun ensurePlatformSession(password: String, requestCode: suspend (String) -> String?) {
+    suspend fun checkPlatformSession(): Result<Boolean> = result { validatePlatformSession() }
+
+    private suspend fun validatePlatformSession(): Boolean {
         val cached = platform
         if (cached != null) {
             val data = try {
@@ -126,9 +129,10 @@ class NbuApiService(
             } catch (_: SessionExpiredException) {
                 null
             }
-            if (data != null && data.tgcStatus != "tgcInvalidate") {
+            if (data != null && data.tgcStatus != "tgcInvalidate" && data.status == "cpdailyPage" &&
+                data.authStatus == "auth" && data.deviceStatus != "exception") {
                 savePlatformSession(data, cached.idsToken)
-                return
+                return true
             }
         }
         platform = null
@@ -136,7 +140,14 @@ class NbuApiService(
         for (domain in listOf("campushoy.com", "cpdaily.com")) cookies.remove("sessionToken", domain)
         cookies.remove("MOD_AUTH_CAS", ACTIVITY_ENTRY.toHttpUrl().host)
         userManager.saveCookies(username, cookies.snapshot())
+        return false
+    }
 
+    private suspend fun ensurePlatformSession(password: String, requestCode: suspend (String) -> String?) {
+        if (validatePlatformSession()) return
+        check(userManager.getUser(username)?.local != false) {
+            "分享的登录状态已失效，请由本机账户重新登录并生成分享码"
+        }
         val keys = PlatformCipher.secretResponse(platformPost(
             "app/auth/dynamic/secret/getSecretKey/v-920", PlatformCipher.secretRequest()
         ).asString)
@@ -209,6 +220,7 @@ class NbuApiService(
         val session = PlatformSession(token, userId, tgc, idsToken, PLATFORM_DEVICE_TYPE, requireNotNull(deviceId))
         platform = session
         userManager.savePlatformSession(username, session)
+        userManager.saveDeviceProfile(username, device)
         for (domain in listOf("campushoy.com", "cpdaily.com")) {
             val values = mapOf("sessionToken" to token, "tenantId" to "nbu", "clientType" to "cpdaily_student", "standAlone" to "1")
             cookies.saveFromResponse("https://$domain/".toHttpUrl(), values.map { (name, value) ->
@@ -231,7 +243,7 @@ class NbuApiService(
     private fun platformRequest(url: String): Request.Builder {
         val token = PlatformCipher.des(platform?.sessionToken.orEmpty(), "XCE927==")
         val info = gson.toJson(linkedMapOf(
-            "systemName" to "android", "systemVersion" to Build.VERSION.RELEASE, "model" to Build.MODEL,
+            "systemName" to "android", "systemVersion" to device.systemVersion, "model" to device.model,
             "deviceId" to requireNotNull(deviceId), "appVersion" to "10.2.7", "cpdailyVersion" to "9.9.10",
             "lon" to 0.0, "lat" to 0.0, "userId" to platform?.userId.orEmpty()
         ))

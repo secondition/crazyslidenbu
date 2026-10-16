@@ -2,10 +2,12 @@ package com.example.nbu.util
 
 import android.content.Context
 import android.content.ContentUris
+import android.os.Build
 import android.provider.MediaStore
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.example.nbu.model.BrowserProfile
+import com.example.nbu.model.DeviceProfile
 import com.example.nbu.model.PlatformSession
 import com.example.nbu.model.User
 import com.google.gson.Gson
@@ -35,6 +37,7 @@ class UserManager(context: Context) {
         private const val KEY_SPLASH_AD = "splash_ad"
         private const val KEY_SPLASH_AD_INDEX = "splash_ad_index"
         
+        private const val KEY_PREFIX_DEVICE = "device_"
         private const val KEY_PREFIX_BROWSER = "browser_"
         private const val KEY_PREFIX_PLATFORM = "platform_"
         private const val KEY_PREFIX_COOKIES = "cookies_"
@@ -120,6 +123,29 @@ class UserManager(context: Context) {
         )
         prefs.edit { putString(key, gson.toJson(profile)) }
         return profile
+    }
+
+    fun saveBrowserProfile(username: String, profile: BrowserProfile) {
+        prefs.edit { putString(KEY_PREFIX_BROWSER + username, gson.toJson(profile)) }
+    }
+
+    fun getDeviceProfile(username: String): DeviceProfile {
+        prefs.getString(KEY_PREFIX_DEVICE + username, null)?.let { return gson.fromJson(it, DeviceProfile::class.java) }
+        return DeviceProfile(Build.VERSION.RELEASE, Build.MODEL).also { saveDeviceProfile(username, it) }
+    }
+
+    fun saveDeviceProfile(username: String, profile: DeviceProfile) {
+        prefs.edit { putString(KEY_PREFIX_DEVICE + username, gson.toJson(profile)) }
+    }
+
+    fun importAccount(account: AccountCode.Account): User {
+        val user = account.user.copy(remark = getUser(account.user.username)?.remark.orEmpty())
+        clearAuthentication(user.username)
+        saveUser(user)
+        saveBrowserProfile(user.username, account.browser)
+        saveDeviceProfile(user.username, account.device)
+        savePlatformSession(user.username, account.session)
+        return user
     }
 
     fun getLocalDeviceId(): String? = prefs.getString(KEY_DEVICE_ID, null)

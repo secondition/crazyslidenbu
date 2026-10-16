@@ -36,6 +36,15 @@
             android:textSize="12sp"
             android:textColor="@color/text_secondary"
             android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/tvSessionStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/account_checking"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"/>
     </LinearLayout>
 
     <ImageView

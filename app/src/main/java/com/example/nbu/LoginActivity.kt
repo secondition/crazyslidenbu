@@ -30,6 +30,7 @@ import androidx.core.view.children
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.example.nbu.databinding.ActivityLoginBinding
+import com.example.nbu.model.DeviceProfile
 import com.example.nbu.model.User
 import com.example.nbu.network.NbuApiService
 import com.example.nbu.util.AccountCode
@@ -45,6 +46,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,10 +73,13 @@ class LoginActivity : AppCompatActivity() {
     private var roundTrips = 0
     private var validation: Job? = null
     private var authentication: Job? = null
+    private var accountChecks: Job? = null
     private var adCountdown: Job? = null
     private val selectedAccounts = linkedSetOf<String>()
 
-    private val signActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+    private val signActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (page == Page.ACCOUNTS) checkAccounts(userManager.getAllUsers())
+    }
     private val accountScanner = registerForActivityResult(ScanContract()) { result ->
         val value = result.contents ?: return@registerForActivityResult
         val received = try {
@@ -83,13 +88,13 @@ class LoginActivity : AppCompatActivity() {
             showError(getString(R.string.invalid_account_code))
             return@registerForActivityResult
         }
-        val existing = userManager.getUser(received.username)
-        if (existing != null && existing.password != received.password) userManager.clearAuthentication(received.username)
-        val user = received.copy(remark = existing?.remark.orEmpty())
-        userManager.saveUser(user)
-        fillAccount(user)
-        showAccounts()
-        Toast.makeText(this, R.string.account_added, Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            accountChecks?.cancelAndJoin()
+            val user = userManager.importAccount(received)
+            fillAccount(user)
+            showAccounts()
+            Toast.makeText(this@LoginActivity, R.string.account_added, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private val photoPermission: String
@@ -224,6 +229,7 @@ class LoginActivity : AppCompatActivity() {
             validation?.cancel()
             validation = null
         }
+        if (target != Page.ACCOUNTS) accountChecks?.cancel()
         binding.credentials.visibility = if (target == Page.LOGIN) View.VISIBLE else View.GONE
         binding.accounts.root.visibility = if (target == Page.ACCOUNTS) View.VISIBLE else View.GONE
         binding.editor.root.visibility = if (target == Page.EDITOR) View.VISIBLE else View.GONE
@@ -256,8 +262,7 @@ class LoginActivity : AppCompatActivity() {
                 visibility = if (user.remark.isNotEmpty()) View.VISIBLE else View.GONE
             }
             item.findViewById<View>(R.id.btnShare).apply {
-                visibility = if (user.local && user.deviceId == userManager.getLocalDeviceId() &&
-                    userManager.getCachedSession(user.username) != null) View.VISIBLE else View.GONE
+                visibility = View.GONE
                 setOnClickListener { showAccountCode(user) }
             }
             val selection = item.findViewById<CheckBox>(R.id.selectAccount)
@@ -277,6 +282,34 @@ class LoginActivity : AppCompatActivity() {
                 }
             }
             accounts.llUserList.addView(item)
+        }
+        checkAccounts(users)
+    }
+
+    private fun checkAccounts(users: List<User>) {
+        val previous = accountChecks
+        accountChecks = lifecycleScope.launch {
+            previous?.cancelAndJoin()
+            users.forEachIndexed { index, user ->
+                val item = binding.accounts.llUserList.getChildAt(index)
+                val status = item.findViewById<TextView>(R.id.tvSessionStatus)
+                status.setText(R.string.account_checking)
+                status.setTextColor(getColor(R.color.text_secondary))
+                item.findViewById<View>(R.id.btnShare).visibility = View.GONE
+                launch {
+                    val result = NbuApiService(user.username, userManager).checkPlatformSession()
+                    val available = result.getOrNull() == true
+                    status.setText(when {
+                        result.isFailure -> R.string.account_check_failed
+                        available -> R.string.account_available
+                        user.local -> R.string.account_login_required
+                        else -> R.string.account_reshare_required
+                    })
+                    status.setTextColor(getColor(if (available) R.color.brand_primary else R.color.status_error))
+                    item.findViewById<View>(R.id.btnShare).visibility =
+                        if (available && user.local && user.deviceId == userManager.getLocalDeviceId()) View.VISIBLE else View.GONE
+                }
+            }
         }
     }
 
@@ -383,8 +416,10 @@ class LoginActivity : AppCompatActivity() {
         setEditorBusy(true)
         validation = lifecycleScope.launch {
             try {
+                accountChecks?.cancelAndJoin()
                 if (existing == null) {
-                    NbuApiService(username, userManager, user.deviceId).login(password) { message ->
+                    val device = DeviceProfile(Build.VERSION.RELEASE, Build.MODEL)
+                    NbuApiService(username, userManager, user.deviceId, device).login(password) { message ->
                         requestVerificationCode(message, editor.root, binding.verification)
                     }.getOrThrow()
                 } else if (existing.password != password) userManager.clearAuthentication(username)
@@ -417,14 +452,17 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun showAccountCode(user: User) {
-        if (!user.local || user.deviceId != userManager.getLocalDeviceId() ||
-            userManager.getCachedSession(user.username) == null) {
+        val session = userManager.getPlatformSession(user.username)
+        if (!user.local || user.deviceId != userManager.getLocalDeviceId() || session == null) {
             showAccounts()
+            showError(getString(R.string.account_login_required))
             return
         }
+        val code = AccountCode.encode(user, session, userManager.getBrowserProfile(user.username),
+            userManager.getDeviceProfile(user.username))
         currentAccount = user
         binding.share.tvAccountName.text = user.displayName
-        binding.share.ivCode.setImageBitmap(BarcodeEncoder().encodeBitmap(AccountCode.encode(user), BarcodeFormat.QR_CODE, 768, 768))
+        binding.share.ivCode.setImageBitmap(BarcodeEncoder().encodeBitmap(code, BarcodeFormat.QR_CODE, 768, 768))
         showPage(Page.SHARE)
     }
 
@@ -493,9 +531,11 @@ class LoginActivity : AppCompatActivity() {
         if (authentication?.isActive == true) return
         val sourcePage = page
         val content = if (page == Page.ACCOUNTS) binding.accounts.root else binding.credentials
+        var enteredSign = false
         setLoadingState(true, getString(R.string.logging_in))
         authentication = lifecycleScope.launch {
             try {
+                accountChecks?.cancelAndJoin()
                 val failures = mutableListOf<String>()
                 users.forEachIndexed { index, user ->
                     if (users.size > 1) setLoadingState(true,
@@ -512,6 +552,7 @@ class LoginActivity : AppCompatActivity() {
                     binding.tvStatus.visibility = View.GONE
                     binding.accounts.tvAccountStatus.visibility = View.GONE
                     Toast.makeText(this@LoginActivity, R.string.logged_in, Toast.LENGTH_SHORT).show()
+                    enteredSign = true
                     signActivityLauncher.launch(Intent(this@LoginActivity, SignActivity::class.java)
                         .putStringArrayListExtra(SignActivity.EXTRA_USERNAMES, ArrayList(users.map { it.username })))
                 }
@@ -525,6 +566,7 @@ class LoginActivity : AppCompatActivity() {
                 authentication = null
                 setLoadingState(false)
                 if (page != sourcePage) content.visibility = View.GONE
+                if (page == Page.ACCOUNTS && !enteredSign) checkAccounts(userManager.getAllUsers())
             }
         }
     }

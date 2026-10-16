@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.core.content.edit
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.example.nbu.util.UserManager
-import com.example.nbu.model.User
+import com.example.nbu.model.BrowserProfile
+import com.example.nbu.model.DeviceProfile
 import com.example.nbu.model.PlatformSession
+import com.example.nbu.model.User
+import com.example.nbu.util.AccountCode
+import com.example.nbu.util.UserManager
 import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -29,6 +32,26 @@ class BrowserProfileTest {
 
         assertEquals(browser, UserManager(context).getBrowserProfile(username))
         assertNotEquals(browser.fingerprint, otherBrowser.fingerprint)
+    }
+
+    @Test
+    fun importedAccountRestoresSharedAuthentication() {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val manager = UserManager(context)
+        val user = User(UUID.randomUUID().toString(), "shared", deviceId = UUID.randomUUID().toString())
+        manager.saveUser(user.copy(password = "old", remark = "group"))
+        manager.saveSession(user.username, "old")
+        val session = PlatformSession("token", "user", "tgc", "ids", "3", requireNotNull(user.deviceId))
+        val browser = BrowserProfile("shared browser", "shared fingerprint")
+        val device = DeviceProfile("16", "shared tablet")
+        manager.importAccount(AccountCode.Account(user, session, browser, device))
+
+        val restored = UserManager(context)
+        assertEquals(user.copy(remark = "group"), restored.getUser(user.username))
+        assertEquals(session, restored.getPlatformSession(user.username))
+        assertEquals(browser, restored.getBrowserProfile(user.username))
+        assertEquals(device, restored.getDeviceProfile(user.username))
+        assertNull(restored.getCachedSession(user.username))
     }
 
     @Test
