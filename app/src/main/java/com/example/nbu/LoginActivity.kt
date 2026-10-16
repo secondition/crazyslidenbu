@@ -17,6 +17,7 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.example.nbu.databinding.ActivityLoginBinding
@@ -83,7 +84,14 @@ class LoginActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            splash.setOnExitAnimationListener { screen ->
+                screen.iconView.animate().scaleX(1.08f).scaleY(1.08f).setDuration(600).start()
+                screen.view.animate().alpha(0f).setDuration(600).withEndAction { screen.remove() }.start()
+            }
+        }
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
         StatusBarUtil.setStatusBarColor(this, ContextCompat.getColor(this, R.color.header))
