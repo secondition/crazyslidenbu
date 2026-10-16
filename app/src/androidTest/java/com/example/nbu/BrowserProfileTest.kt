@@ -65,6 +65,7 @@ class BrowserProfileTest {
         manager.saveUser(first)
         manager.saveUser(second)
         val restored = UserManager(context)
+        assertEquals(manager.getLocalDeviceId(), restored.readDeviceId())
         assertNull(restored.getDeviceId(ordinary.username))
         assertEquals(first.deviceId, restored.getDeviceId(first.username))
         assertEquals(second.deviceId, restored.getDeviceId(second.username))

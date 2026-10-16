@@ -146,22 +146,25 @@ class UserManager(context: Context) {
 
     fun getDeviceId(username: String): String? = getUser(username)?.deviceId
 
-    fun readDeviceId(): String? {
+    fun readDeviceId(): String {
+        getLocalDeviceId()?.let { return it }
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        val uri = resolver.query(collection, arrayOf(MediaStore.Images.Media._ID),
+        val cursor = resolver.query(collection, arrayOf(MediaStore.Images.Media._ID),
             "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?", arrayOf("%cpdaily_external_did%"),
-            "${MediaStore.Images.Media.DATE_MODIFIED} DESC")?.use { cursor ->
-            if (!cursor.moveToFirst()) return null
-            ContentUris.withAppendedId(collection, cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)))
-        } ?: error("无法读取系统媒体库")
-        val input = resolver.openInputStream(uri) ?: error("无法读取共享设备标识")
-        val deviceId = DataInputStream(input).use {
-            val bytes = ByteArray(36)
-            it.readFully(bytes)
-            check(it.read() == -1) { "共享设备标识格式无效" }
-            bytes.toString(Charsets.UTF_8)
+            "${MediaStore.Images.Media.DATE_MODIFIED} DESC") ?: error("无法读取系统媒体库")
+        val uri = cursor.use {
+            if (it.moveToFirst()) ContentUris.withAppendedId(collection,
+                it.getLong(it.getColumnIndexOrThrow(MediaStore.Images.Media._ID))) else null
         }
-        UUID.fromString(deviceId)
+        val deviceId = if (uri == null) UUID.randomUUID().toString() else {
+            val input = resolver.openInputStream(uri) ?: error("无法读取共享设备标识")
+            DataInputStream(input).use {
+                val bytes = ByteArray(36)
+                it.readFully(bytes)
+                check(it.read() == -1) { "共享设备标识格式无效" }
+                bytes.toString(Charsets.UTF_8)
+            }.also { UUID.fromString(it) }
+        }
         prefs.edit { putString(KEY_DEVICE_ID, deviceId) }
         return deviceId
     }

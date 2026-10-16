@@ -138,7 +138,8 @@ class NbuApiService(private val username: String, private val userManager: UserM
             "a" to PlatformCipher.encrypt(payload, key),
             "b" to "first_v4"
         )).asString
-        val data = gson.fromJson(PlatformCipher.decrypt(response, key), PlatformLoginResult::class.java)
+        var data = gson.fromJson(PlatformCipher.decrypt(response, key), PlatformLoginResult::class.java)
+        if (data.deviceStatus == "exception") data = authenticatePlatformDevice(data, ticket, requestCode)
         check(data.deviceStatus != "exception") {
             data.deviceExceptionMsg ?: "平台未识别此账号的设备身份"
         }
@@ -153,6 +154,26 @@ class NbuApiService(private val username: String, private val userManager: UserM
             })
         }
         userManager.saveCookies(username, cookies.snapshot())
+    }
+
+    private suspend fun authenticatePlatformDevice(
+        data: PlatformLoginResult,
+        ticket: String,
+        requestCode: suspend (String) -> String?
+    ): PlatformLoginResult {
+        val mobile = data.mobile?.takeIf { it.isNotBlank() }
+            ?: error("此账号未绑定手机号，请在风华宁大完成绑定")
+        platformPost("v6/auth/deviceChange/mobile/messageCode/v2", mapOf(
+            "mobile" to PlatformCipher.des(mobile, "QTZ&A@54")
+        ))
+        val code = requestCode("设备认证短信已发送至尾号 ${mobile.takeLast(4)} 的手机，请输入短信验证码")
+            ?: throw CancellationException("已取消设备认证")
+        val response = platformPost("v6/auth/deviceChange/validateMessageCode", mapOf(
+            "mobile" to mobile, "messageCode" to code,
+            "ticket" to PlatformCipher.des(ticket, "XCE927==")
+        ))
+        return gson.fromJson(response, PlatformLoginResult::class.java)
+            ?: error("设备认证响应为空")
     }
 
     private suspend fun mobileLogin(
@@ -486,6 +507,7 @@ class NbuApiService(private val username: String, private val userManager: UserM
         val authStatus: String?,
         val deviceStatus: String?,
         val deviceExceptionMsg: String?,
+        val mobile: String?,
         val sessionToken: String?,
         val msgTip: String?
     )

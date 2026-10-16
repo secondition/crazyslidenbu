@@ -3,7 +3,7 @@
     <string name="verification_code">验证码</string>
     <string name="verify">验证</string>
     <string name="back_to_account">返回账户</string>
-    <string name="verification_required">请输入风华宁大验证码</string>
+    <string name="verification_required">请输入验证码</string>
     <string name="student_id">学号</string>
     <string name="password">密码</string>
     <string name="clear_student_id">拖动以清空学号</string>
@@ -22,8 +22,7 @@
     <string name="login_failed">登录失败</string>
     <string name="version_label" translatable="false">v1.3</string>
     <string name="device_permission">自动识别设备标识需要照片访问权限，请允许访问所有照片。</string>
-    <string name="device_missing">未找到本机设备标识，可通过扫码添加账号。</string>
-    <string name="device_detected">设备标识已识别，请填写本机风华宁大的账号密码。</string>
+    <string name="device_detected">设备标识已准备，请填写本机账号密码。</string>
     <string name="account_management">账户管理</string>
     <string name="add_local_account">添加本机账户</string>
     <string name="verifying_account">正在验证…</string>

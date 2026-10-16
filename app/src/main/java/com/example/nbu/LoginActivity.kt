@@ -442,8 +442,8 @@ class LoginActivity : AppCompatActivity() {
     private fun readLocalDevice() {
         lifecycleScope.launch {
             try {
-                val deviceId = withContext(Dispatchers.IO) { userManager.readDeviceId() }
-                if (deviceId == null) showError(getString(R.string.device_missing)) else showEditor(null)
+                withContext(Dispatchers.IO) { userManager.readDeviceId() }
+                showEditor(null)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
