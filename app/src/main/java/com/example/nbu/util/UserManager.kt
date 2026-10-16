@@ -231,7 +231,7 @@ class UserManager(context: Context) {
     
     // ==================== 开屏跳转 ====================
 
-    fun isSplashAdEnabled(): Boolean = prefs.getBoolean(KEY_SPLASH_AD, false)
+    fun isSplashAdEnabled(): Boolean = prefs.getBoolean(KEY_SPLASH_AD, true)
 
     fun setSplashAdEnabled(enabled: Boolean) {
         prefs.edit { putBoolean(KEY_SPLASH_AD, enabled) }
